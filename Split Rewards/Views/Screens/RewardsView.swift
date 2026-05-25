@@ -12,7 +12,6 @@ struct RewardsView: View {
     // Brand
     private let blue = Color.splitBrandBlue
     private let pink = Color.splitBrandPink
-    private let berry = Color.splitBerry
     private let indigo = Color.splitIndigo
     private let cardSurface = Color.splitCardSurface
     private let hairline = Color.white.opacity(0.10)
@@ -38,7 +37,7 @@ struct RewardsView: View {
                     .padding(.bottom, 12)
 
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 18) {
                         if !hasAttemptedLoad || isLoading {
                             loadingStateCard
 
@@ -89,12 +88,14 @@ struct RewardsView: View {
     private var backgroundAtmosphere: some View {
         VStack(spacing: 0) {
             LinearGradient(
-                colors: [pink.opacity(0.28), berry.opacity(0.08), .clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                colors: [
+                    Color.white.opacity(0.045),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .frame(height: 220)
-            .blur(radius: 8)
+            .frame(height: 170)
 
             Spacer()
         }
@@ -141,7 +142,7 @@ struct RewardsView: View {
                             .frame(width: 42, height: 42)
                             .overlay(
                                 Circle()
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
                             )
 
                         Image(systemName: "atom")
@@ -158,94 +159,106 @@ struct RewardsView: View {
 
     @ViewBuilder
     private func rewardsHero(stats: RewardStatsResponse) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Monthly Rewards")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
-                        .foregroundColor(.white)
-                }
+        VStack(alignment: .leading, spacing: 18) {
+            projectedRewardSummary(stats: stats)
 
-                Spacer(minLength: 16)
+            VStack(alignment: .leading, spacing: 10) {
+                sectionLabel("Your Stats")
 
-                VStack(alignment: .trailing, spacing: 8) {
-                    Text(stats.monthKey)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white.opacity(0.70))
-
-                    MiniPill(text: "LIVE", accentColor: .white)
-                }
-            }
-
-            HStack(spacing: 12) {
-                rewardsHighlightPanel(
-                    title: "Your Rewards",
-                    btcValue: btcString(fromSats: stats.stats.projectedEarningsSats),
-                    usdValue: usdString(fromSats: stats.stats.projectedEarningsSats),
+                rewardsDetailRow(
+                    title: "Your Share",
+                    subtitle: "Of this month's rewards pot",
+                    value: shareString(fromBps: stats.stats.shareBps),
+                    detail: nil,
+                    symbol: "percent",
                     accentColor: pink
                 )
 
-                rewardsHighlightPanel(
+                rewardsDetailRow(
+                    title: "Your Reward Spend",
+                    subtitle: transactionsLabel(stats.user.transactions),
+                    value: centsToUSD(stats.user.rewardSpendCents),
+                    detail: nil,
+                    symbol: "person.crop.circle.fill",
+                    accentColor: blue
+                )
+
+                rewardsDetailRow(
+                    title: "Your Lifetime BTC",
+                    subtitle: "Paid rewards",
+                    value: btcString(fromSats: stats.stats.lifetimeEarningsSats),
+                    detail: nil,
+                    symbol: "checkmark.seal.fill",
+                    accentColor: pink
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                sectionLabel("Platform")
+
+                monthlyActivityCard(stats: stats)
+            }
+        }
+    }
+
+    private func projectedRewardSummary(stats: RewardStatsResponse) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Monthly Rewards")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.66))
+
+                    Text("Current projection")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white.opacity(0.46))
+                }
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 8) {
+                    Text(stats.monthKey)
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.white.opacity(0.76))
+
+                    Circle()
+                        .fill(pink)
+                        .frame(width: 7, height: 7)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(Color.white.opacity(0.08))
+                )
+            }
+
+            HStack(spacing: 12) {
+                heroRewardMetric(
+                    title: "Your Rewards",
+                    primaryValue: usdString(fromSats: stats.stats.projectedEarningsSats),
+                    secondaryValue: btcString(fromSats: stats.stats.projectedEarningsSats),
+                    accentColor: pink
+                )
+
+                heroRewardMetric(
                     title: "Rewards Pot",
-                    btcValue: btcString(fromSats: stats.monthlyPot.sats),
-                    usdValue: usdString(fromSats: stats.monthlyPot.sats),
+                    primaryValue: usdString(fromSats: stats.monthlyPot.sats),
+                    secondaryValue: btcString(fromSats: stats.monthlyPot.sats),
                     accentColor: blue
                 )
             }
-
-            Rectangle()
-                .fill(Color.white.opacity(0.12))
-                .frame(height: 1)
-
-            VStack(spacing: 10) {
-                rewardsMetricRow(
-                    leftTitle: "Your Share of  the pot",
-                    leftValue: shareString(fromBps: stats.stats.shareBps),
-                    rightTitle: "Your Lifetime BTC Rewards",
-                    rightValue: btcString(fromSats: stats.stats.lifetimeEarningsSats)
-                )
-
-                rewardsMetricRow(
-                    leftTitle: "Your Reward Spend",
-                    leftValue: centsToUSD(stats.user.rewardSpendCents),
-                    rightTitle: "Your Transactions",
-                    rightValue: "\(stats.user.transactions)"
-                )
-
-                rewardsMetricRow(
-                    leftTitle: "Platform Reward Spend",
-                    leftValue: centsToUSD(stats.platform.rewardSpendCents),
-                    rightTitle: "Platform Transactions",
-                    rightValue: "\(stats.platform.transactions)"
-                )
-            }
         }
-        .padding(20)
+        .padding(22)
         .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            pink,
-                            berry,
-                            indigo
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.splitAppBlack)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 1)
         )
-        .overlay(alignment: .bottomLeading) {
-            Rectangle()
-                .fill(Color.black.opacity(0.18))
-                .frame(height: 8)
-                .offset(y: 14)
-        }
-        .shadow(color: pink.opacity(0.22), radius: 22, x: 0, y: 14)
+        .shadow(color: .black.opacity(0.24), radius: 20, x: 0, y: 12)
     }
 
     private var loadingStateCard: some View {
@@ -301,132 +314,169 @@ struct RewardsView: View {
         )
     }
 
-    private func heroMetric(
-        title: String,
-        value: String,
-        accentColor: Color
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.white.opacity(0.56))
-
-            Text(value)
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.black.opacity(0.22))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
-        )
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.bold))
+            .textCase(.uppercase)
+            .foregroundColor(.white.opacity(0.44))
+            .padding(.horizontal, 2)
     }
 
-    private func heroStatPill(label: String, value: String, accentColor: Color) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label)
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.white.opacity(0.54))
-
-            Text(value)
-                .font(.headline.weight(.semibold))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.black.opacity(0.18))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
-        )
-    }
-
-    private func rewardsHighlightPanel(
+    private func heroRewardMetric(
         title: String,
-        btcValue: String,
-        usdValue: String,
+        primaryValue: String,
+        secondaryValue: String,
         accentColor: Color
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            Capsule()
+                .fill(accentColor)
+                .frame(width: 30, height: 3)
+
             Text(title)
-                .font(.caption.weight(.heavy))
-                .tracking(1.2)
-                .foregroundColor(.white.opacity(0.64))
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.white.opacity(0.58))
 
-            Text(btcValue)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+            Text(primaryValue)
+                .font(.system(size: 24, weight: .black, design: .rounded))
                 .foregroundColor(.white)
+                .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.62)
 
-            Text(usdValue)
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(.white.opacity(0.84))
+            Text(secondaryValue)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.58))
+                .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.68)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
+        .padding(15)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.22))
+                .fill(Color.white.opacity(0.055))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(accentColor.opacity(0.25), lineWidth: 1)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     }
 
-    private func rewardsMetricRow(
-        leftTitle: String,
-        leftValue: String,
-        rightTitle: String,
-        rightValue: String
+    private func rewardsDetailRow(
+        title: String,
+        subtitle: String,
+        value: String,
+        detail: String?,
+        symbol: String,
+        accentColor: Color
     ) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            rewardsMetricCell(title: leftTitle, value: leftValue)
-            rewardsMetricCell(title: rightTitle, value: rightValue)
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(accentColor.opacity(0.18))
+                    .frame(width: 46, height: 46)
+
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.92))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.86))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(subtitle)
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(.white.opacity(0.48))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(value)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.64)
+
+                if let detail {
+                    Text(detail)
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(.white.opacity(0.50))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.70)
+                }
+            }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(cardSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 
-    private func rewardsMetricCell(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.white.opacity(0.56))
+    private func monthlyActivityCard(stats: RewardStatsResponse) -> some View {
+        VStack(spacing: 0) {
+            activityComparisonRow(
+                title: "Platform Reward Spend",
+                value: centsToUSD(stats.platform.rewardSpendCents),
+                detail: transactionsLabel(stats.platform.transactions)
+            )
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.045))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func activityComparisonRow(
+        title: String,
+        value: String,
+        detail: String?
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.white.opacity(0.68))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.84)
+
+                if let detail {
+                    Text(detail)
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(.white.opacity(0.44))
+                }
+            }
+
+            Spacer(minLength: 12)
 
             Text(value)
-                .font(.headline.weight(.semibold))
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundColor(.white)
+                .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.black.opacity(0.16))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
+        .padding(.vertical, 13)
     }
 
     private func btcString(fromSats sats: Int) -> String {
@@ -448,17 +498,13 @@ struct RewardsView: View {
         return nf.string(from: NSNumber(value: usd)) ?? "$—"
     }
 
-    private func satsString(_ sats: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 0
-        let formatted = formatter.string(from: NSNumber(value: sats)) ?? "\(sats)"
-        return "\(formatted) sats"
-    }
-
     private func shareString(fromBps bps: Int) -> String {
         let pct = Double(bps) / 100.0
         return String(format: "%.2f%%", pct)
+    }
+
+    private func transactionsLabel(_ count: Int) -> String {
+        count == 1 ? "1 transaction" : "\(count) transactions"
     }
 
     @MainActor

@@ -1,6 +1,7 @@
 //  LNQRSheet.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/13/26.
 //
 
 import SwiftUI
@@ -17,11 +18,11 @@ struct IdentityShareSheet: View {
     let paymentQRString: String
     let contactQRString: String
 
-    @State private var selectedMode: ShareMode = .splitContact
+    @State private var selectedMode: ShareMode = .payment
     @State private var sharePayload: IdentityShareSharePayload?
     private enum ShareMode: String, CaseIterable, Identifiable {
-        case splitContact = "Add Contact"
         case payment = "Payment"
+        case splitContact = "Add Contact"
 
         var id: String { rawValue }
     }

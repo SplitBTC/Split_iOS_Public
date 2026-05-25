@@ -1,6 +1,7 @@
 //  GetRewardStats.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 2/5/26.
 //
 import SwiftUI
 import Foundation

@@ -2,6 +2,7 @@
 //  ReceivePayments.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 1/11/25.
 //
 import Foundation
 import BreezSdkSpark
@@ -19,7 +20,7 @@ extension WalletManager {
     /// - Returns: The BOLT11 invoice string, or `nil` on failure.
     func generateBolt11Invoice(
         description: String,
-        amountSats: UInt64,
+        amountSats: UInt64?,
         expirySecs: UInt32 = 3600
     ) async -> String? {
         lastErrorMessage = nil
@@ -32,12 +33,12 @@ extension WalletManager {
         do {
             let response = try await sdk.receivePayment(
                 request: ReceivePaymentRequest(
-                    paymentMethod: .bolt11Invoice(
-                        description: description,
-                        amountSats: amountSats,   // <- pass UInt64 directly
-                        expirySecs: expirySecs,
-                        paymentHash: nil
-                    )
+                        paymentMethod: .bolt11Invoice(
+                            description: description,
+                            amountSats: amountSats,
+                            expirySecs: expirySecs,
+                            paymentHash: nil
+                        )
                 )
             )
 
@@ -69,7 +70,7 @@ extension WalletManager {
         do {
             let response = try await sdk.receivePayment(
                 request: ReceivePaymentRequest(
-                    paymentMethod: .bitcoinAddress
+                    paymentMethod: .bitcoinAddress(newAddress: true)
                 )
             )
 
@@ -109,4 +110,3 @@ extension WalletManager {
         }
     }
 }
-

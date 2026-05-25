@@ -2,6 +2,7 @@
 //  MessageStore.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/20/26.
 //
 
 import Foundation
@@ -110,71 +111,6 @@ struct MessageConversationPreview: Identifiable, Equatable {
     let hasFailedOutgoingMessage: Bool
 }
 
-private struct SharedOutgoingMessageRelayRecord: Codable {
-    let id: String
-    let conversationId: String
-    let clientMessageId: String
-    let body: String
-    let createdAt: Date
-    let senderWalletPubkey: String
-    let senderMessagingPubkey: String
-    let senderLightningAddress: String?
-    let recipientWalletPubkey: String
-    let recipientMessagingPubkey: String
-    let recipientLightningAddress: String
-    let messageType: String
-
-    var storedMessage: StoredMessage {
-        StoredMessage(
-            id: id,
-            conversationId: conversationId,
-            clientMessageId: clientMessageId,
-            body: body,
-            createdAt: createdAt,
-            isIncoming: false,
-            isRead: true,
-            senderWalletPubkey: senderWalletPubkey,
-            senderMessagingPubkey: senderMessagingPubkey,
-            senderLightningAddress: senderLightningAddress,
-            recipientWalletPubkey: recipientWalletPubkey,
-            recipientMessagingPubkey: recipientMessagingPubkey,
-            recipientLightningAddress: recipientLightningAddress,
-            messageType: messageType,
-            deliveryState: nil
-        )
-    }
-}
-
-enum SharedOutgoingMessageRelayStore {
-    static let appGroupIdentifier = AppConfig.sharedAppGroupIdentifier
-    private static let defaultsKey = "shareExtensionOutgoingMessageRelayRecords"
-
-    @MainActor
-    static func importPendingMessages() {
-        guard let defaults = UserDefaults(suiteName: appGroupIdentifier),
-              let encoded = defaults.data(forKey: defaultsKey) else {
-            return
-        }
-
-        guard let decoded = try? JSONDecoder().decode([SharedOutgoingMessageRelayRecord].self, from: encoded) else {
-            defaults.removeObject(forKey: defaultsKey)
-            return
-        }
-
-        guard !decoded.isEmpty else {
-            defaults.removeObject(forKey: defaultsKey)
-            return
-        }
-
-        do {
-            _ = try MessageStore.shared.upsert(decoded.map(\.storedMessage))
-            defaults.removeObject(forKey: defaultsKey)
-        } catch {
-            print("Failed to import share extension sent messages: \(error.localizedDescription)")
-        }
-    }
-}
-
 @MainActor
 final class MessageStore: ObservableObject {
     static let shared = MessageStore()
@@ -210,8 +146,11 @@ final class MessageStore: ObservableObject {
     private init() {
         let baseDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        let messagingDirectory = baseDirectory.appendingPathComponent("Messaging", isDirectory: true)
+        let messagingDirectory = baseDirectory
+            .appendingPathComponent("Messaging", isDirectory: true)
+            .appendingPathComponent(AppConfig.messagingPushEnvironment, isDirectory: true)
         self.storeURL = messagingDirectory.appendingPathComponent("messages.json")
+        Self.migrateLegacyProdStoreIfNeeded(to: storeURL, baseDirectory: baseDirectory)
         let loadedMessages = Self.loadMessages(from: storeURL)
         self.messages = loadedMessages.messages
         self.needsRecoveryReload = loadedMessages.needsRecoveryReload
@@ -582,6 +521,37 @@ final class MessageStore: ObservableObject {
 
         print("⚠️ [MessageStore] Existing plaintext message store could not be decoded. Deferring reload instead of clearing messages.")
         return LoadedMessages(messages: [], needsMigration: false, needsRecoveryReload: true)
+    }
+
+    private static func migrateLegacyProdStoreIfNeeded(to storeURL: URL, baseDirectory: URL) {
+        guard AppConfig.messagingPushEnvironment == "prod",
+              !FileManager.default.fileExists(atPath: storeURL.path)
+        else {
+            return
+        }
+
+        let legacyURL = baseDirectory
+            .appendingPathComponent("Messaging", isDirectory: true)
+            .appendingPathComponent("messages.json")
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else {
+            return
+        }
+
+        do {
+            try FileManager.default.createDirectory(
+                at: storeURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            try FileManager.default.copyItem(at: legacyURL, to: storeURL)
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: storeURL.path
+            )
+            print("MessageStore: copied legacy shared message store into prod-scoped store.")
+        } catch {
+            print("MessageStore: legacy prod message migration skipped. \(error.localizedDescription)")
+        }
     }
 
     private func ensureStoreAvailableForMutation() throws {

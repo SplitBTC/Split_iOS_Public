@@ -2,6 +2,7 @@
 //  MessagingDeviceTokenManager.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/21/26.
 //
 
 import Foundation
@@ -16,8 +17,20 @@ final class MessagingDeviceTokenManager: ObservableObject {
     private let syncedTokenDefaultsKey = "split.messaging.apns.syncedToken"
     private let syncedMessagingPubkeyDefaultsKey = "split.messaging.apns.syncedMessagingPubkey"
     private let syncedEnvironmentDefaultsKey = "split.messaging.apns.syncedEnvironment"
+    private let syncedAtDefaultsKey = "split.messaging.apns.syncedAt"
+    private let minimumForcedRefreshInterval: TimeInterval = 24 * 60 * 60
+    private weak var authManager: AuthManager?
+    private weak var walletManager: WalletManager?
 
     private init() {}
+
+    func configure(
+        authManager: AuthManager,
+        walletManager: WalletManager
+    ) {
+        self.authManager = authManager
+        self.walletManager = walletManager
+    }
 
     var currentDeviceToken: String? {
         UserDefaults.standard.string(forKey: currentTokenDefaultsKey)
@@ -35,6 +48,10 @@ final class MessagingDeviceTokenManager: ObservableObject {
         UserDefaults.standard.string(forKey: syncedEnvironmentDefaultsKey)
     }
 
+    var syncedAt: Date? {
+        UserDefaults.standard.object(forKey: syncedAtDefaultsKey) as? Date
+    }
+
     func registerForRemoteNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, error in
             if let error {
@@ -50,12 +67,29 @@ final class MessagingDeviceTokenManager: ObservableObject {
     func updateAPNsDeviceToken(_ deviceToken: Data) {
         let hexToken = deviceToken.map { String(format: "%02x", $0) }.joined()
         let defaults = UserDefaults.standard
+        let didChange = defaults.string(forKey: currentTokenDefaultsKey) != hexToken
 
-        if defaults.string(forKey: currentTokenDefaultsKey) != hexToken {
+        if didChange {
             defaults.set(hexToken, forKey: currentTokenDefaultsKey)
             defaults.removeObject(forKey: syncedTokenDefaultsKey)
             defaults.removeObject(forKey: syncedMessagingPubkeyDefaultsKey)
             defaults.removeObject(forKey: syncedEnvironmentDefaultsKey)
+            defaults.removeObject(forKey: syncedAtDefaultsKey)
+        }
+
+        guard didChange,
+              let authManager,
+              let walletManager,
+              case .ready = walletManager.state else {
+            return
+        }
+
+        Task { @MainActor in
+            await syncDeviceTokenIfPossible(
+                authManager: authManager,
+                walletManager: walletManager,
+                force: true
+            )
         }
     }
 
@@ -65,6 +99,7 @@ final class MessagingDeviceTokenManager: ObservableObject {
         defaults.removeObject(forKey: syncedTokenDefaultsKey)
         defaults.removeObject(forKey: syncedMessagingPubkeyDefaultsKey)
         defaults.removeObject(forKey: syncedEnvironmentDefaultsKey)
+        defaults.removeObject(forKey: syncedAtDefaultsKey)
     }
 
     func unregisterDeviceTokenIfPossible(
@@ -98,11 +133,20 @@ final class MessagingDeviceTokenManager: ObservableObject {
                 return
             }
 
-            if !force,
-               syncedDeviceToken == currentDeviceToken,
-               syncedMessagingPubkey == activeMessagingPubkey,
-               syncedEnvironment == AppConfig.messagingPushEnvironment {
-                return
+            let hasMatchingSyncedRegistration =
+                syncedDeviceToken == currentDeviceToken &&
+                syncedMessagingPubkey == activeMessagingPubkey &&
+                syncedEnvironment == AppConfig.messagingPushEnvironment
+
+            if hasMatchingSyncedRegistration {
+                if !force {
+                    return
+                }
+
+                if let syncedAt,
+                   Date().timeIntervalSince(syncedAt) < minimumForcedRefreshInterval {
+                    return
+                }
             }
 
             _ = try await MessagingDeviceTokenAPI.registerDeviceToken(
@@ -115,6 +159,7 @@ final class MessagingDeviceTokenManager: ObservableObject {
             defaults.set(currentDeviceToken, forKey: syncedTokenDefaultsKey)
             defaults.set(activeMessagingPubkey, forKey: syncedMessagingPubkeyDefaultsKey)
             defaults.set(AppConfig.messagingPushEnvironment, forKey: syncedEnvironmentDefaultsKey)
+            defaults.set(Date(), forKey: syncedAtDefaultsKey)
         } catch let urlError as URLError where urlError.code == .cancelled {
             return
         } catch {

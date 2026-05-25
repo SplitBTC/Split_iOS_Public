@@ -11,8 +11,23 @@ AppIcon</string>
 	<string>Confirm ID to keep your app secure from unauthorized use and access.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Access needed to scan QR codes to send and receive Bitcoin payments.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Split needs local network access to connect to your Lightning node over your LAN, .local hostname, private VPN, or Tor configuration.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Split uses your location to show nearby bitcoin-accepting merchants on the BTC merchant map.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>onion</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>SplitBaseScheme</key>
 	<string>$(BASE_SCHEME)</string>
 	<key>SplitBaseHost</key>
@@ -23,17 +38,17 @@ AppIcon</string>
 	<string>$(AppIdentifierPrefix)$(SPLIT_SHARED_KEYCHAIN_GROUP_SUFFIX)</string>
 	<key>SplitKeychainService</key>
 	<string>$(SPLIT_KEYCHAIN_SERVICE)</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
-	<key>UILaunchScreen</key>
-	<dict/>
 	<key>SplitMessagingPushEnvironment</key>
 	<string>$(MESSAGING_PUSH_ENV)</string>
 	<key>SplitMessagingIdentityDomain</key>
 	<string>$(MESSAGING_IDENTITY_DOMAIN)</string>
 	<key>SplitLightningAddressDomain</key>
 	<string>$(LIGHTNING_ADDRESS_DOMAIN)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
 </dict>
 </plist>

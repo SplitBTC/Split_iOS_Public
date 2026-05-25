@@ -1,6 +1,7 @@
 //  RewardsInfo.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 2/10/26.
 //
 import SwiftUI
 
@@ -26,17 +27,12 @@ struct RewardsInfo: View {
                         .foregroundColor(.white.opacity(0.88))
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("You earn a share of the Bitcoin pool two ways:")
+                    Text("You earn a share of the Bitcoin pool based on the Bitcoin you spend with verified merchants.")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.88))
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("1. You get credited for all of the Bitcoin you spend with verified merchants.")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.88))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("2. You get credited 10% of spend for eligible Bitcoin purchases via our on-ramp.")
+                    Text("You get credited for all of the Bitcoin you spend with verified merchants.")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.88))
                         .fixedSize(horizontal: false, vertical: true)
@@ -68,7 +64,7 @@ struct RewardsInfo: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundColor(.white.opacity(0.85))
 
-                            Text("Rewards are based on Bitcoin spent with verified merchants listed in the app and eligible on-ramp Bitcoin purchases.")
+                            Text("Rewards are based on Bitcoin spent with verified merchants listed in the app.")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.70))
                                 .fixedSize(horizontal: false, vertical: true)
@@ -136,4 +132,3 @@ private func cardBackground(accentColor: Color) -> some View {
         RewardsInfo()
     }
 }
-

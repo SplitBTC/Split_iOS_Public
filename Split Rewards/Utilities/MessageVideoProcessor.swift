@@ -2,6 +2,7 @@
 //  MessageVideoProcessor.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/30/26.
 //
 
 import AVFoundation

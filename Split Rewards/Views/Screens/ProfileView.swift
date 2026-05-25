@@ -1,11 +1,11 @@
 //  ProfileView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/11/26.
 //
 
 import SwiftUI
-import UIKit
-import UniformTypeIdentifiers
+import Foundation
 
 private let splitBlue = Color.splitBrandBlue
 private let splitPink = Color.splitBrandPink
@@ -14,29 +14,22 @@ private func alternatingProfileColor(at index: Int) -> Color {
     index.isMultiple(of: 2) ? splitBlue : splitPink
 }
 
-struct ProfileView: View {
-    @EnvironmentObject var walletManager: WalletManager
-    @EnvironmentObject var authManager: AuthManager
+private struct ProfileNavItem: Identifiable {
+    let id: String
+    let image: String
+    let title: String
+    let subtitle: String
+    let destination: AnyView
+}
 
+struct ProfileView: View {
     private let background = Color.splitSoftBackground
     private let cardSurface = Color.splitInputSurfaceTertiary
     private let cardStroke = Color.white.opacity(0.06)
 
-    @State private var lightningAddress: WalletManager.LightningAddressInfo?
-    @State private var messagingRegistration: MessageKeyManager.RegistrationResponse?
-    @State private var profilePicUrl: String?
-    @State private var selectedProfileImage: UIImage?
-    @State private var pickedPhotoImage: UIImage?
-    @State private var isLoadingAddress = true
-    @State private var isUploadingProfilePic = false
-    @State private var addressLoadError: String?
-    @State private var profilePicUploadError: String?
-
-    @State private var showingCreateSheet = false
-    @State private var showingQRSheet = false
-    @State private var showingPhotoSourceDialog = false
-    @State private var showingImagePicker = false
-    @State private var showingFileImporter = false
+    @State private var hasConnectedLightningNode = false
+    @State private var hasConnectedNWCWallet = false
+    @State private var hasConnectedCoreLightningNode = false
 
     var body: some View {
         ZStack {
@@ -48,71 +41,18 @@ struct ProfileView: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 14) {
+                        ForEach(profileNavItems.indices, id: \.self) { index in
+                            let item = profileNavItems[index]
 
-                        navCard(
-                            image: "arrow.down.circle.fill",
-                            iconColor: alternatingProfileColor(at: 0),
-                            title: "Claim Your Bitcoin",
-                            subtitle: "Claim when ready.",
-                            destination: BitcoinPending()
-                        )
-                        .padding(.top, 14)
-                        
-                        navCard(
-                            image: "circle.rectangle.filled.pattern.diagonalline",
-                            iconColor: alternatingProfileColor(at: 1),
-                            title: "Proof Of Spend",
-                            subtitle: "Manage your posts.",
-                            destination: ManagePOSPostsView()
-                        )
-
-                        navCard(
-                            image: "storefront.fill",
-                            iconColor: alternatingProfileColor(at: 2),
-                            title: "Add a Merchant",
-                            subtitle: "Help us add any BTC business.",
-                            destination: AddMerchantView()
-                        )
-
-                        navCard(
-                            image: "atom",
-                            iconColor: alternatingProfileColor(at: 3),
-                            title: "Rewards Explained",
-                            subtitle: "How it works.",
-                            destination: RewardsInfo()
-                        )
-
-                        navCard(
-                            image: "questionmark.bubble.fill",
-                            iconColor: alternatingProfileColor(at: 4),
-                            title: "Contact / Support",
-                            subtitle: "Questions, feedback, and product ideas.",
-                            destination: SupportView()
-                        )
-
-                        navCard(
-                            image: "flag.slash.fill",
-                            iconColor: alternatingProfileColor(at: 5),
-                            title: "Content Moderation",
-                            subtitle: "Blocking and reporting content/users.",
-                            destination: ContentModerationView()
-                        )
-
-                        navCard(
-                            image: "doc.text.fill",
-                            iconColor: alternatingProfileColor(at: 6),
-                            title: "Legal",
-                            subtitle: "Documents and agreements.",
-                            destination: LegalView()
-                        )
-
-                        navCard(
-                            image: "key.fill",
-                            iconColor: alternatingProfileColor(at: 7),
-                            title: "Wallet Management",
-                            subtitle: "Wallet device access.",
-                            destination: WalletManagementView()
-                        )
+                            navCard(
+                                image: item.image,
+                                iconColor: alternatingProfileColor(at: index),
+                                title: item.title,
+                                subtitle: item.subtitle,
+                                destination: item.destination
+                            )
+                            .padding(.top, index == 0 ? 14 : 0)
+                        }
 
                         Spacer(minLength: 28)
                     }
@@ -123,94 +63,105 @@ struct ProfileView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            Task {
-                await loadProfileContent()
-            }
-        }
-        .sheet(isPresented: $showingCreateSheet) {
-            CreateLightningAddressSheet { createdAddress, registration in
-                lightningAddress = createdAddress
-                messagingRegistration = registration
-            }
-            .environmentObject(walletManager)
-            .environmentObject(authManager)
-        }
-        .sheet(isPresented: $showingQRSheet) {
-            if let lightningAddress {
-                IdentityShareSheet(
-                    lightningAddress: lightningAddress.lightningAddress,
-                    suggestedContactName: suggestedContactName(for: lightningAddress),
-                    paymentQRString: qrPayload(for: lightningAddress),
-                    contactQRString: contactPayload(for: lightningAddress)
-                )
-                .presentationDetents([.large])
-                .presentationDragIndicator(.hidden)
-            }
-        }
-        .confirmationDialog(
-            "Update Profile Photo",
-            isPresented: $showingPhotoSourceDialog,
-            titleVisibility: .visible
-        ) {
-            Button("Choose Photo") {
-                showingImagePicker = true
-            }
+        .onAppear(perform: refreshWalletConnectionState)
+    }
 
-            Button("Choose File") {
-                showingFileImporter = true
-            }
+    private var profileNavItems: [ProfileNavItem] {
+        [
+            ProfileNavItem(
+                id: "lightning-wallets",
+                image: "bolt.fill",
+                title: "Lightning Wallets",
+                subtitle: lightningConnectionsSubtitle,
+                destination: AnyView(LightningConnectionsView())
+            ),
+            ProfileNavItem(
+                id: "add-merchant",
+                image: "storefront.fill",
+                title: "Add a Merchant",
+                subtitle: "Add any BTC business to our rewards program.",
+                destination: AnyView(AddMerchantView())
+            ),
+            ProfileNavItem(
+                id: "rewards-explained",
+                image: "atom",
+                title: "Rewards Explained",
+                subtitle: "How it works.",
+                destination: AnyView(RewardsInfo())
+            ),
+            ProfileNavItem(
+                id: "claim-bitcoin",
+                image: "arrow.down.circle.fill",
+                title: "Claim Your Bitcoin",
+                subtitle: "On-chain deposits.",
+                destination: AnyView(BitcoinPending())
+            ),
+            ProfileNavItem(
+                id: "support",
+                image: "questionmark.bubble.fill",
+                title: "Contact / Support",
+                subtitle: "Questions, feedback, and product ideas.",
+                destination: AnyView(SupportView())
+            ),
+            ProfileNavItem(
+                id: "content-moderation",
+                image: "flag.slash.fill",
+                title: "Content Moderation",
+                subtitle: "Blocking and user safety.",
+                destination: AnyView(ContentModerationView())
+            ),
+            ProfileNavItem(
+                id: "legal",
+                image: "doc.text.fill",
+                title: "Legal",
+                subtitle: "Documents and agreements.",
+                destination: AnyView(LegalView())
+            ),
+            ProfileNavItem(
+                id: "account-management",
+                image: "key.fill",
+                title: "Account Management",
+                subtitle: "Manage your Split account.",
+                destination: AnyView(WalletManagementView())
+            )
+        ]
+    }
 
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Choose an image from your photo library or Files.")
-        }
-        .sheet(isPresented: $showingImagePicker) {
-            ImagePicker(image: $pickedPhotoImage)
-        }
-        .fileImporter(
-            isPresented: $showingFileImporter,
-            allowedContentTypes: [.image],
-            allowsMultipleSelection: false
-        ) { result in
-            handleProfileFileSelection(result)
-        }
-        .onChange(of: pickedPhotoImage) { _, newImage in
-            guard let newImage else { return }
+    private func refreshWalletConnectionState() {
+        hasConnectedLightningNode = LNDCredentialStore.shared.activeNode() != nil
+        hasConnectedNWCWallet = NWCCredentialStore.shared.activeWallet() != nil
+        hasConnectedCoreLightningNode = CoreLightningCredentialStore.shared.activeNode() != nil
+    }
 
-            Task {
-                await handleSelectedPhoto(newImage)
-            }
+    private var lightningConnectionsSubtitle: String {
+        let connectedCount = [
+            hasConnectedLightningNode,
+            hasConnectedNWCWallet,
+            hasConnectedCoreLightningNode
+        ].filter { $0 }.count
+
+        if connectedCount > 1 {
+            return "Manage your Lightning connections"
         }
+
+        if connectedCount == 1 {
+            return "Manage your Lightning connection"
+        }
+
+        return "Connect a Lightning node or wallet"
     }
 
     private var profileHeaderSection: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 18) {
-                profilePhotoSection
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Profile")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundColor(.white)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Profile")
-                        .font(.system(size: 30, weight: .bold))
-                        .foregroundColor(.white)
-
-                    Text("Lightning identity and app settings")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.58))
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            if let profilePicUploadError {
-                Text(profilePicUploadError)
-                    .font(.subheadline)
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.leading)
-            }
-
-            lightningAddressSection
+            Text("App settings and wallet management")
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.58))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 24)
         .padding(.top, 24)
         .padding(.bottom, 22)
@@ -243,180 +194,6 @@ struct ProfileView: View {
                 .fill(Color.white.opacity(0.06))
                 .frame(height: 1)
         }
-    }
-
-    @ViewBuilder
-    private var lightningAddressSection: some View {
-        if isLoadingAddress {
-            HStack(spacing: 12) {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-
-                Text("Loading Lightning Address...")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.72))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 22)
-                    .fill(Color.white.opacity(0.05))
-            )
-
-        } else if let addressLoadError {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(addressLoadError)
-                    .font(.subheadline)
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.leading)
-
-                Button(action: {
-                    Task { await loadLightningAddress() }
-                }) {
-                    Text("Retry")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            Capsule()
-                                .fill(splitBlue)
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 22)
-                    .fill(Color.white.opacity(0.05))
-            )
-
-        } else if let lightningAddress {
-            HStack(alignment: .center, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Lightning Address")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.white.opacity(0.56))
-
-                    Text(lightningAddress.lightningAddress)
-                        .font(.system(size: 21, weight: .semibold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .truncationMode(.middle)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer(minLength: 0)
-
-                Button(action: {
-                    showingQRSheet = true
-                }) {
-                    Image(systemName: "qrcode")
-                        .font(.title3.weight(.semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 48, height: 48)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(splitBlue)
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 22)
-                    .fill(Color.white.opacity(0.05))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
-            )
-
-        } else {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Setup a Lightning Address for this wallet.")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.68))
-                    .multilineTextAlignment(.leading)
-
-                Button(action: {
-                    showingCreateSheet = true
-                }) {
-                    Text("Create Lightning Address")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(splitBlue)
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 22)
-                    .fill(Color.white.opacity(0.05))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
-            )
-        }
-    }
-
-    private var profilePhotoSection: some View {
-        Button {
-            showingPhotoSourceDialog = true
-        } label: {
-            Group {
-                if let selectedProfileImage {
-                    Image(uiImage: selectedProfileImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 92, height: 92)
-                        .background(Circle().fill(Color.white.opacity(0.08)))
-                        .clipShape(Circle())
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                } else if let profilePicURL = URL(string: profilePicUrl ?? ""),
-                          let profilePicUrl,
-                          !profilePicUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    AsyncImage(url: profilePicURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .empty:
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .tint(.white)
-                        case .failure:
-                            profilePhotoPlaceholder
-                        @unknown default:
-                            profilePhotoPlaceholder
-                        }
-                    }
-                    .frame(width: 92, height: 92)
-                    .background(Circle().fill(Color.white.opacity(0.08)))
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
-                } else {
-                    profilePhotoPlaceholder
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(isUploadingProfilePic)
     }
 
     @ViewBuilder
@@ -469,234 +246,13 @@ struct ProfileView: View {
         }
         .buttonStyle(.plain)
     }
-
-    private var profilePhotoPlaceholder: some View {
-        ZStack {
-            Circle()
-                .fill(Color.white.opacity(0.08))
-
-            Text("+ add photo")
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.white.opacity(0.9))
-                .multilineTextAlignment(.center)
-        }
-        .frame(width: 92, height: 92)
-        .overlay(
-            Circle()
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-    }
-
-    private func loadProfileContent() async {
-        await loadProfilePic()
-        await loadLightningAddress()
-    }
-
-    private func loadProfilePic() async {
-        do {
-            let response = try await ProfilePicAPI.fetchProfilePic(
-                authManager: authManager,
-                walletManager: walletManager
-            )
-            profilePicUrl = response.profilePicUrl
-        } catch {
-            print("Failed to load profile picture: \(error.localizedDescription)")
-            profilePicUrl = nil
-        }
-    }
-
-    private func handleSelectedPhoto(_ image: UIImage) async {
-        guard let fileData = image.jpegData(compressionQuality: 0.9) else {
-            profilePicUploadError = "Failed to prepare selected photo."
-            pickedPhotoImage = nil
-            return
-        }
-
-        await uploadProfilePic(
-            fileData: fileData,
-            fileName: "profile-photo.jpg",
-            mimeType: "image/jpeg",
-            previewImage: image
-        )
-
-        pickedPhotoImage = nil
-    }
-
-    private func handleProfileFileSelection(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-
-            let didAccess = url.startAccessingSecurityScopedResource()
-            defer {
-                if didAccess {
-                    url.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            do {
-                let data = try Data(contentsOf: url)
-                guard let image = UIImage(data: data) else {
-                    profilePicUploadError = "Selected file could not be used as a profile picture."
-                    return
-                }
-
-                let fileName = url.lastPathComponent.isEmpty ? "profile-file" : url.lastPathComponent
-                let mimeType = mimeTypeForProfileFile(at: url)
-
-                Task {
-                    await uploadProfilePic(
-                        fileData: data,
-                        fileName: fileName,
-                        mimeType: mimeType,
-                        previewImage: image
-                    )
-                }
-            } catch {
-                profilePicUploadError = "Failed to read selected file."
-                print("Failed to read selected profile file: \(error.localizedDescription)")
-            }
-        case .failure(let error):
-            print("Profile file import cancelled or failed: \(error.localizedDescription)")
-        }
-    }
-
-    private func uploadProfilePic(
-        fileData: Data,
-        fileName: String,
-        mimeType: String,
-        previewImage: UIImage
-    ) async {
-        isUploadingProfilePic = true
-        profilePicUploadError = nil
-
-        do {
-            let response = try await ProfilePicUploadAPI.postProfilePic(
-                fileData: fileData,
-                fileName: fileName,
-                mimeType: mimeType,
-                authManager: authManager,
-                walletManager: walletManager
-            )
-
-            selectedProfileImage = previewImage
-            profilePicUrl = response.profilePicUrl ?? profilePicUrl
-        } catch {
-            profilePicUploadError = error.localizedDescription
-            print("Failed to upload profile picture: \(error.localizedDescription)")
-        }
-
-        isUploadingProfilePic = false
-    }
-
-    private func mimeTypeForProfileFile(at url: URL) -> String {
-        if let values = try? url.resourceValues(forKeys: [.contentTypeKey]),
-           let contentType = values.contentType,
-           let mimeType = contentType.preferredMIMEType {
-            return mimeType
-        }
-
-        return "application/octet-stream"
-    }
-
-    private func loadLightningAddress() async {
-        isLoadingAddress = true
-        addressLoadError = nil
-
-        do {
-            let fetched = try await walletManager.fetchLightningAddress()
-            lightningAddress = fetched
-
-            if fetched != nil {
-                do {
-                    messagingRegistration = try await MessageKeyManager.shared.ensureRegistered(
-                        authManager: authManager,
-                        walletManager: walletManager
-                    )
-                } catch {
-                    messagingRegistration = nil
-                    print("Failed to sync messaging identity: \(error.localizedDescription)")
-                }
-            } else {
-                messagingRegistration = nil
-            }
-        } catch {
-            addressLoadError = error.localizedDescription
-            lightningAddress = nil
-            messagingRegistration = nil
-        }
-
-        isLoadingAddress = false
-    }
-
-    private func qrPayload(for info: WalletManager.LightningAddressInfo) -> String {
-        if !info.lnurlBech32.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return info.lnurlBech32
-        }
-
-        return "lightning:\(info.lightningAddress)"
-    }
-
-    private func suggestedContactName(for info: WalletManager.LightningAddressInfo) -> String {
-        let address = info.lightningAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let username = address.split(separator: "@").first, !username.isEmpty else {
-            return "Split User"
-        }
-
-        return String(username)
-    }
-
-    private func contactPayload(for info: WalletManager.LightningAddressInfo) -> String {
-        struct SplitContactPayload: Encodable {
-            let type: String
-            let version: Int
-            let lightningAddress: String
-            let suggestedName: String
-            let profilePicUrl: String?
-            let walletPubkey: String?
-            let messagingPubkey: String?
-            let messagingIdentitySignature: String?
-            let messagingIdentitySignatureVersion: Int?
-            let messagingIdentitySignedAt: Int?
-        }
-
-        let normalizedLightningAddress = info.lightningAddress
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let signedBinding = messagingRegistration?.identityBindingPayload
-        let shouldEmbedSignedBinding = signedBinding?.lightningAddress == normalizedLightningAddress
-
-        let payload = SplitContactPayload(
-            type: "split_contact",
-            version: 1,
-            lightningAddress: normalizedLightningAddress,
-            suggestedName: suggestedContactName(for: info),
-            profilePicUrl: profilePicUrl?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                ? profilePicUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
-                : nil,
-            walletPubkey: shouldEmbedSignedBinding ? signedBinding?.walletPubkey : nil,
-            messagingPubkey: shouldEmbedSignedBinding ? signedBinding?.messagingPubkey : nil,
-            messagingIdentitySignature: shouldEmbedSignedBinding ? signedBinding?.messagingIdentitySignature : nil,
-            messagingIdentitySignatureVersion: shouldEmbedSignedBinding ? signedBinding?.messagingIdentitySignatureVersion : nil,
-            messagingIdentitySignedAt: shouldEmbedSignedBinding ? signedBinding?.messagingIdentitySignedAt : nil
-        )
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-
-        guard let data = try? encoder.encode(payload),
-              let jsonString = String(data: data, encoding: .utf8) else {
-            return "split-contact:{\"lightningAddress\":\"\(info.lightningAddress.lowercased())\",\"suggestedName\":\"\(suggestedContactName(for: info))\",\"type\":\"split_contact\",\"version\":1}"
-        }
-
-        return "split-contact:\(jsonString)"
-    }
 }
 
-private struct CreateLightningAddressSheet: View {
+struct CreateLightningAddressSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var walletManager: WalletManager
     @EnvironmentObject private var authManager: AuthManager
+    @FocusState private var isUsernameFocused: Bool
 
     let onCreated: (WalletManager.LightningAddressInfo, MessageKeyManager.RegistrationResponse?) -> Void
 
@@ -733,141 +289,196 @@ private struct CreateLightningAddressSheet: View {
                 Color.black
                     .ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 20) {
-
-                    Text("Choose a username")
-                        .font(.title2.bold())
-                        .foregroundColor(.white)
-
-                    Text("This will become your Lightning Address.")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-
-                    VStack(alignment: .leading, spacing: 10) {
-
-                        Text("Username")
-                            .font(.subheadline.weight(.semibold))
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("Choose a username")
+                            .font(.title2.bold())
                             .foregroundColor(.white)
 
-                        HStack(spacing: 8) {
-                            TextField("username", text: $username)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .keyboardType(.asciiCapable)
-                                .foregroundColor(.white)
-
-                            Text("@\(AppConfig.lightningAddressDomain)")
-                                .foregroundColor(.gray.opacity(0.5))
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                        .onChange(of: username) { _, _ in
-                            errorMessage = nil
-                            checkedUsername = nil
-                            isUsernameAvailable = false
-                        }
-
-                        Text("Allowed: letters, numbers, periods, underscores, and hyphens.")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-
-                    if !normalizedUsernamePreview.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Preview")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundColor(.white)
-
-                            Text(normalizedUsernamePreview)
-                                .font(.headline)
-                                .foregroundColor(.white)
-                        }
-                    }
-
-                    if let checkedUsername, isUsernameAvailable {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Available")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundColor(splitPink)
-
-                            Text("Your address will be created with username: \(checkedUsername)")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                        }
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage)
+                        Text("This will become your Lightning Address.")
                             .font(.subheadline)
-                            .foregroundColor(.red)
-                    }
+                            .foregroundColor(.gray)
 
-                    Spacer()
+                        VStack(alignment: .leading, spacing: 10) {
 
-                    VStack(spacing: 12) {
+                            Text("Username")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(.white)
 
-                        Button(action: {
-                            Task { await checkAvailability() }
-                        }) {
-                            HStack {
-                                if isCheckingAvailability {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                } else {
-                                    Text("Check Availability")
-                                        .font(.headline)
+                            ViewThatFits(in: .horizontal) {
+                                usernameInputRow
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    usernameField
+                                    Text("@\(AppConfig.lightningAddressDomain)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.gray.opacity(0.5))
                                 }
                             }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
+                            .padding()
                             .background(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(canCheckAvailability ? splitBlue : Color.gray.opacity(0.4))
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.white.opacity(0.08))
                             )
-                        }
-                        .disabled(!canCheckAvailability)
 
-                        Button(action: {
-                            Task { await createLightningAddress() }
-                        }) {
-                            HStack {
-                                if isCreatingAddress {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                } else {
-                                    Text("Create Lightning Address")
-                                        .font(.headline)
-                                }
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(canCreateAddress ? splitPink : Color.gray.opacity(0.4))
-                            )
+                            Text("Allowed: letters, numbers, periods, underscores, and hyphens.")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .disabled(!canCreateAddress)
+
+                        if !normalizedUsernamePreview.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Preview")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(.white)
+
+                                Text("\(normalizedUsernamePreview)@\(AppConfig.lightningAddressDomain)")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.78)
+                            }
+                        }
+
+                        if let checkedUsername, isUsernameAvailable {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Available")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(splitPink)
+
+                                Text("Your address will be created with username: \(checkedUsername)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(24)
+                    .padding(.bottom, 150)
                 }
-                .padding(24)
+                .scrollDismissesKeyboard(.interactively)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isUsernameFocused = false
+                }
             }
             .navigationTitle("Create Address")
             .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                actionButtons
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
+                        isUsernameFocused = false
                         dismiss()
                     }
                     .foregroundColor(.white)
                     .disabled(isCheckingAvailability || isCreatingAddress)
                 }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+
+                    Button("Done") {
+                        isUsernameFocused = false
+                    }
+                    .foregroundColor(splitPink)
+                }
             }
         }
+    }
+
+    private var usernameInputRow: some View {
+        HStack(spacing: 8) {
+            usernameField
+
+            Text("@\(AppConfig.lightningAddressDomain)")
+                .font(.subheadline)
+                .foregroundColor(.gray.opacity(0.5))
+                .lineLimit(1)
+        }
+    }
+
+    private var usernameField: some View {
+        TextField("username", text: $username)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(.asciiCapable)
+            .submitLabel(.done)
+            .focused($isUsernameFocused)
+            .foregroundColor(.white)
+            .onSubmit {
+                isUsernameFocused = false
+            }
+            .onChange(of: username) { _, _ in
+                errorMessage = nil
+                checkedUsername = nil
+                isUsernameAvailable = false
+            }
+    }
+
+    private var actionButtons: some View {
+        VStack(spacing: 12) {
+            Button(action: {
+                isUsernameFocused = false
+                Task { await checkAvailability() }
+            }) {
+                HStack {
+                    if isCheckingAvailability {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                    } else {
+                        Text("Check Availability")
+                            .font(.headline)
+                    }
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(canCheckAvailability ? splitBlue : Color.gray.opacity(0.4))
+                )
+            }
+            .disabled(!canCheckAvailability)
+
+            Button(action: {
+                isUsernameFocused = false
+                Task { await createLightningAddress() }
+            }) {
+                HStack {
+                    if isCreatingAddress {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                    } else {
+                        Text("Create Lightning Address")
+                            .font(.headline)
+                    }
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(canCreateAddress ? splitPink : Color.gray.opacity(0.4))
+                )
+            }
+            .disabled(!canCreateAddress)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
+        .background(.black)
     }
 
     private func checkAvailability() async {
@@ -927,5 +538,8 @@ private struct CreateLightningAddressSheet: View {
         ProfileView()
             .environmentObject(WalletManager())
             .environmentObject(AuthManager())
+            .environmentObject(LNDWalletManager())
+            .environmentObject(NWCWalletManager())
+            .environmentObject(ActiveSpendWalletStore())
     }
 }

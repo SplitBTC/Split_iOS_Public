@@ -2,13 +2,13 @@
 //  KeychainHelper.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 6/3/25.
 //
 
 import Foundation
 import Security
 
 struct KeychainHelper {
-
     /// Single-wallet-per-device seed storage key.
     static let walletSeedKey = "split.wallet.seed"
 

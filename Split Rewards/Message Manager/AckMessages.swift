@@ -2,6 +2,7 @@
 //  AckMessages.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/20/26.
 //
 
 import Foundation
@@ -32,8 +33,8 @@ struct OutgoingMessageStatusesResponse: Decodable {
 struct OutgoingMessageStatus: Identifiable, Decodable {
     let id: String
     let clientMessageId: String
-    let recipientLightningAddress: String
-    let recipientWalletPubkey: String
+    let recipientLightningAddress: String?
+    let recipientWalletPubkey: String?
     let status: String
     let sameKeyRetryCount: Int
     let createdAt: Date?
@@ -179,6 +180,7 @@ enum DecryptFailedMessagesAPI {
     @MainActor
     static func markMessagesDecryptFailed(
         messageIds: [String],
+        failureReasons: [String: String] = [:],
         authManager: AuthManager,
         walletManager: WalletManager
     ) async throws -> DecryptFailedMessagesResponse {
@@ -203,7 +205,15 @@ enum DecryptFailedMessagesAPI {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try JSONEncoder().encode(["messageIds": messageIds])
+        struct RequestBody: Encodable {
+            let messageIds: [String]
+            let failureReasons: [String: String]
+        }
+
+        request.httpBody = try JSONEncoder().encode(RequestBody(
+            messageIds: messageIds,
+            failureReasons: failureReasons
+        ))
 
         var (data, response) = try await URLSession.shared.data(for: request)
 

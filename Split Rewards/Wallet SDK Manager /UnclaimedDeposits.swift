@@ -2,6 +2,7 @@
 //  UnclaimedDeposits.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 2/15/26.
 //
 //  Handles Bitcoin on-chain deposit discovery
 //  and manual claiming.

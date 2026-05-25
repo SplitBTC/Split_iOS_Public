@@ -1,6 +1,7 @@
 //  GetBitcoinPrice.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 1/15/26.
 //
 import Foundation
 

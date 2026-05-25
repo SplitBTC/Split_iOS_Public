@@ -2,6 +2,7 @@
 //  Split_RewardsUITests.swift
 //  Split RewardsUITests
 //
+//  Created by TeeVee on 1/11/25.
 //
 
 import XCTest

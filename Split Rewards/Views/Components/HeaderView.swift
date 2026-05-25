@@ -1,14 +1,13 @@
 //  HeaderView.swift
 //  Split-iOS
 //
+//  Created by TeeVee on 1/8/25.
 //
 import SwiftUI
 
 struct HeaderView: View {
-    // Brand colors (matching rest of app)
-    private let blue = Color.splitBrandBlue
+    // Brand color (matching rest of app)
     private let pink = Color.splitBrandPink
-    @State private var showScanToPayFlow = false
 
     var body: some View {
         HStack {
@@ -26,56 +25,51 @@ struct HeaderView: View {
 
             Spacer()
 
-            NavigationLink(destination: BTCMerchantMapView()) {
-                Image(systemName: "storefront.fill")
-                    .font(.title2.weight(.semibold))
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.9))
-                    )
-            }
-            .padding(.trailing, 8)
+            HStack(spacing: 5) {
+                NavigationLink(destination: ContactList()) {
+                    Image(systemName: "person.text.rectangle")
+                        .font(.title2.weight(.semibold))
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.9))
+                        )
+                }
 
-            NavigationLink(destination: ContactList()) {
-                Image(systemName: "person.text.rectangle")
-                    .font(.title2.weight(.semibold))
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.9))
-                    )
-            }
-            .padding(.trailing, 8)
+                NavigationLink(destination: BTCMerchantMapView()) {
+                    Image(systemName: "storefront.fill")
+                        .font(.title2.weight(.semibold))
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.9))
+                        )
+                }
 
-            // QR scanner icon → full-screen payment task flow
-            Button {
-                showScanToPayFlow = true
-            } label: {
-                Image(systemName: "qrcode.viewfinder")
-                    .font(.title2.weight(.semibold))
-                    .foregroundColor(Color.white)
-                    .padding(10)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.9))
-                    )
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 8)
+                NavigationLink(destination: BitcoinEventsView()) {
+                    Image(systemName: "globe")
+                        .font(.title2.weight(.semibold))
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.9))
+                        )
+                }
 
-            // Right: Profile icon → ProfileView
-            NavigationLink(destination: ProfileView()) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.title2.weight(.semibold))
-                    .foregroundColor(Color.white)
-                    .padding(10)
-                    .background(
-                        Circle()
-                            .fill(Color.black.opacity(0.9))
-                    )
+                // Right: Profile icon → ProfileView
+                NavigationLink(destination: ProfileView()) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.title2.weight(.semibold))
+                        .foregroundColor(Color.white)
+                        .padding(10)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.9))
+                        )
+                }
             }
             .padding(.trailing, 16)
         }
@@ -86,11 +80,6 @@ struct HeaderView: View {
             Color.black.opacity(0.95)
                 .ignoresSafeArea(edges: .top)
         )
-        .fullScreenCover(isPresented: $showScanToPayFlow) {
-            NavigationStack {
-                SendBTCView()
-            }
-        }
     }
 }
 

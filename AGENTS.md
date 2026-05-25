@@ -60,7 +60,7 @@ If you are reviewing this repo:
 
 - Treat the private `Split Rewards` repo as the implementation source and this repo as a sanitized publication mirror.
 - Do not do a blind file-for-file mirror from private to public.
-- Sync newer production-ready app code, tests, and extension code from private only after a publication sweep.
+- Sync newer production-ready app code and tests from private only after a publication sweep.
 - Preserve the public repo's sanitization layer when it already exists.
 
 When updating this public repo from private:
@@ -88,7 +88,7 @@ Default review stance during a sync:
 
 Current public snapshot notes:
 
-- This public repo currently exposes the main app, the share extension, and the test targets.
+- This public repo currently exposes the main app and the test targets.
 - Public-safe placeholder bundle identifiers and shared app-group/keychain identifiers are expected here; production identifiers should not be published.
 - Trust the actual public repo contents when describing what is publicly available.
 

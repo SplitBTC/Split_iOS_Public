@@ -1,6 +1,7 @@
 //  Export.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/11/26.
 //
 import SwiftUI
 import UIKit
@@ -9,6 +10,14 @@ import UniformTypeIdentifiers
 struct TransactionExportButton: View {
     let transactions: [WalletManager.TransactionRow]
     let walletManager: WalletManager
+    let isLndTransactionList: Bool
+    let isNWCTransactionList: Bool
+    let lndWalletId: String?
+    let nwcWalletId: String?
+    let isCoreLightningTransactionList: Bool
+    let coreLightningWalletId: String?
+    let isEclairTransactionList: Bool
+    let eclairWalletId: String?
     let accentColor: Color
 
     @State private var isPresentingExporter = false
@@ -39,7 +48,15 @@ struct TransactionExportButton: View {
         .sheet(isPresented: $isPresentingExporter) {
             TransactionExportSheet(
                 transactions: transactions,
-                walletManager: walletManager
+                walletManager: walletManager,
+                isLndTransactionList: isLndTransactionList,
+                isNWCTransactionList: isNWCTransactionList,
+                lndWalletId: lndWalletId,
+                nwcWalletId: nwcWalletId,
+                isCoreLightningTransactionList: isCoreLightningTransactionList,
+                coreLightningWalletId: coreLightningWalletId,
+                isEclairTransactionList: isEclairTransactionList,
+                eclairWalletId: eclairWalletId
             )
         }
     }
@@ -48,8 +65,20 @@ struct TransactionExportButton: View {
 private struct TransactionExportSheet: View {
     let transactions: [WalletManager.TransactionRow]
     let walletManager: WalletManager
+    let isLndTransactionList: Bool
+    let isNWCTransactionList: Bool
+    let lndWalletId: String?
+    let nwcWalletId: String?
+    let isCoreLightningTransactionList: Bool
+    let coreLightningWalletId: String?
+    let isEclairTransactionList: Bool
+    let eclairWalletId: String?
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var lndWalletManager: LNDWalletManager
+    @EnvironmentObject private var nwcWalletManager: NWCWalletManager
+    @EnvironmentObject private var coreLightningWalletManager: CoreLightningWalletManager
+    @EnvironmentObject private var eclairWalletManager: EclairWalletManager
 
     @State private var selectedPreset: TransactionExportPreset = .thisMonth
     @State private var selectedTransactionType: TransactionExportType = .all
@@ -234,18 +263,97 @@ private struct TransactionExportSheet: View {
 
         Task {
             do {
-                let walletPubkey = try await MessageKeyManager.shared.currentWalletPubkey(walletManager: walletManager)
-                await walletManager.ensureUsdSnapshots(for: filteredTransactions)
-                let snapshots = await PaymentUsdSnapshotStore.shared.snapshots(
-                    walletPubkey: walletPubkey,
-                    paymentIds: filteredTransactions.map(\.id)
-                )
+                let metadata: [String: TransactionExportMetadata]
+
+                if isLndTransactionList {
+                    guard let nodeId = lndWalletId ?? lndWalletManager.activeNodeIdentifier() else {
+                        throw LNDWalletError.noStoredNode
+                    }
+
+                    await LNDTransactionMetadataStore.shared.ensureUsdSnapshots(
+                        for: filteredTransactions,
+                        nodeId: nodeId,
+                        currentBtcUsdRate: walletManager.btcUsdRate
+                    )
+
+                    let lndMetadata = await LNDTransactionMetadataStore.shared.metadata(
+                        nodeId: nodeId,
+                        transactionIds: filteredTransactions.map(\.id)
+                    )
+                    metadata = lndMetadata.mapValues {
+                        TransactionExportMetadata(lndMetadata: $0)
+                    }
+                } else if isNWCTransactionList {
+                    guard let walletId = nwcWalletId ?? nwcWalletManager.activeWalletIdentifier() else {
+                        throw NWCWalletError.noStoredConnection
+                    }
+
+                    await NWCTransactionMetadataStore.shared.ensureUsdSnapshots(
+                        for: filteredTransactions,
+                        walletId: walletId,
+                        currentBtcUsdRate: walletManager.btcUsdRate
+                    )
+
+                    let nwcMetadata = await NWCTransactionMetadataStore.shared.metadata(
+                        walletId: walletId,
+                        transactionIds: filteredTransactions.map(\.id)
+                    )
+                    metadata = nwcMetadata.mapValues {
+                        TransactionExportMetadata(nwcMetadata: $0)
+                    }
+                } else if isCoreLightningTransactionList {
+                    guard let nodeId = coreLightningWalletId ?? coreLightningWalletManager.activeNodeIdentifier() else {
+                        throw CoreLightningWalletError.noStoredNode
+                    }
+
+                    await CoreLightningTransactionMetadataStore.ensureUsdSnapshots(
+                        for: filteredTransactions,
+                        nodeId: nodeId,
+                        currentBtcUsdRate: walletManager.btcUsdRate
+                    )
+
+                    let coreLightningMetadata = await CoreLightningTransactionMetadataStore.metadata(
+                        nodeId: nodeId,
+                        transactionIds: filteredTransactions.map(\.id)
+                    )
+                    metadata = coreLightningMetadata.mapValues {
+                        TransactionExportMetadata(lndMetadata: $0)
+                    }
+                } else if isEclairTransactionList {
+                    guard let nodeId = eclairWalletId ?? eclairWalletManager.activeNodeIdentifier() else {
+                        throw EclairWalletError.noStoredNode
+                    }
+
+                    await EclairTransactionMetadataStore.ensureUsdSnapshots(
+                        for: filteredTransactions,
+                        nodeId: nodeId,
+                        currentBtcUsdRate: walletManager.btcUsdRate
+                    )
+
+                    let eclairMetadata = await EclairTransactionMetadataStore.metadata(
+                        nodeId: nodeId,
+                        transactionIds: filteredTransactions.map(\.id)
+                    )
+                    metadata = eclairMetadata.mapValues {
+                        TransactionExportMetadata(lndMetadata: $0)
+                    }
+                } else {
+                    let walletPubkey = try await MessageKeyManager.shared.currentWalletPubkey(walletManager: walletManager)
+                    await walletManager.ensureUsdSnapshots(for: filteredTransactions)
+                    let snapshots = await PaymentUsdSnapshotStore.shared.snapshots(
+                        walletPubkey: walletPubkey,
+                        paymentIds: filteredTransactions.map(\.id)
+                    )
+                    metadata = snapshots.mapValues {
+                        TransactionExportMetadata(paymentSnapshot: $0)
+                    }
+                }
 
                 let url = try TransactionCSVExporter.makeFile(
                     transactions: filteredTransactions,
                     range: activeRange,
                     transactionType: selectedTransactionType,
-                    snapshots: snapshots
+                    metadata: metadata
                 )
 
                 await MainActor.run {
@@ -391,6 +499,30 @@ private struct TransactionExportRange {
     }
 }
 
+private struct TransactionExportMetadata {
+    let btcUsdRateAtTransaction: Double?
+    let usdValueAtTransaction: Double?
+    let isReportable: Bool
+
+    init(paymentSnapshot: PaymentUsdSnapshot) {
+        btcUsdRateAtTransaction = paymentSnapshot.btcUsdRateAtTransaction
+        usdValueAtTransaction = paymentSnapshot.usdValueAtTransaction
+        isReportable = paymentSnapshot.isReportable
+    }
+
+    init(lndMetadata: LNDTransactionMetadata) {
+        btcUsdRateAtTransaction = lndMetadata.btcUsdRateAtTransaction
+        usdValueAtTransaction = lndMetadata.usdValueAtTransaction
+        isReportable = lndMetadata.isReportable
+    }
+
+    init(nwcMetadata: NWCTransactionMetadata) {
+        btcUsdRateAtTransaction = nwcMetadata.btcUsdRateAtTransaction
+        usdValueAtTransaction = nwcMetadata.usdValueAtTransaction
+        isReportable = nwcMetadata.isReportable
+    }
+}
+
 private enum TransactionCSVExporter {
     static let metadataDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -409,13 +541,13 @@ private enum TransactionCSVExporter {
         transactions: [WalletManager.TransactionRow],
         range: TransactionExportRange,
         transactionType: TransactionExportType,
-        snapshots: [String: PaymentUsdSnapshot]
+        metadata: [String: TransactionExportMetadata]
     ) throws -> URL {
         let csv = makeCSV(
             transactions: transactions,
             range: range,
             transactionType: transactionType,
-            snapshots: snapshots
+            metadata: metadata
         )
 
         let directory = try exportDirectory()
@@ -429,7 +561,7 @@ private enum TransactionCSVExporter {
         transactions: [WalletManager.TransactionRow],
         range: TransactionExportRange,
         transactionType: TransactionExportType,
-        snapshots: [String: PaymentUsdSnapshot]
+        metadata: [String: TransactionExportMetadata]
     ) -> String {
         var rows: [String] = [
             csvRow([
@@ -475,7 +607,7 @@ private enum TransactionCSVExporter {
 
         rows.append(
             contentsOf: transactions.map { tx in
-                let snapshot = snapshots[tx.id]
+                let transactionMetadata = metadata[tx.id]
                 return csvRow([
                     rowDateFormatter.string(from: tx.transactionDate),
                     tx.direction.capitalized,
@@ -484,9 +616,9 @@ private enum TransactionCSVExporter {
                     tx.btcAmount,
                     String(tx.feeSats),
                     tx.feeBtcAmount,
-                    snapshot.map(formatRate) ?? "",
-                    snapshot.map(formatUsdValue) ?? "",
-                    formatReportableStatus(snapshot),
+                    transactionMetadata.map(formatRate) ?? "",
+                    transactionMetadata.map(formatUsdValue) ?? "",
+                    formatReportableStatus(transactionMetadata),
                     tx.status,
                     tx.note
                 ])
@@ -508,18 +640,18 @@ private enum TransactionCSVExporter {
         return value
     }
 
-    private static func formatRate(_ snapshot: PaymentUsdSnapshot) -> String {
-        guard let rate = snapshot.btcUsdRateAtTransaction else { return "" }
+    private static func formatRate(_ metadata: TransactionExportMetadata) -> String {
+        guard let rate = metadata.btcUsdRateAtTransaction else { return "" }
         return String(format: "%.8f", rate)
     }
 
-    private static func formatUsdValue(_ snapshot: PaymentUsdSnapshot) -> String {
-        guard let usdValue = snapshot.usdValueAtTransaction else { return "" }
+    private static func formatUsdValue(_ metadata: TransactionExportMetadata) -> String {
+        guard let usdValue = metadata.usdValueAtTransaction else { return "" }
         return String(format: "%.2f", usdValue)
     }
 
-    private static func formatReportableStatus(_ snapshot: PaymentUsdSnapshot?) -> String {
-        snapshot?.isReportable == true ? "Reportable" : "Non-reportable"
+    private static func formatReportableStatus(_ metadata: TransactionExportMetadata?) -> String {
+        metadata?.isReportable == true ? "Reportable" : "Non-reportable"
     }
 
     private static func exportDirectory() throws -> URL {

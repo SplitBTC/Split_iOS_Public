@@ -1,6 +1,7 @@
 //  LNURL.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/11/26.
 //
 
 import Foundation

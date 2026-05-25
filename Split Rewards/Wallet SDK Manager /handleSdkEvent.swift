@@ -2,6 +2,7 @@
 //  handledSdkEvent.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 12/8/25.
 //
 import Foundation
 import BreezSdkSpark
@@ -67,6 +68,12 @@ extension WalletManager {
         }
     }
 
+    private func normalizedRewardPaymentHash(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     // MARK: - Top-level event handler
 
     /// Top-level handler for Breez `SdkEvent`s.
@@ -92,20 +99,21 @@ extension WalletManager {
         // 1) Toasts / UI feedback
         if let toastManager {
             switch event {
-            case .paymentPending(let payment):
-                if isOutgoingPayment(payment) {
-                    toastManager.showPaymentPending(direction: .sent)
+            case .paymentSucceeded(let payment):
+                let isOutgoing = isOutgoingPayment(payment)
+                if !(isOutgoing && consumeSuppressedOutgoingSuccessToastIfNeeded(paymentId: payment.id)) {
+                    toastManager.showPaymentSuccess(
+                        direction: isOutgoing ? .sent : .received
+                    )
                 }
 
-            case .paymentSucceeded(let payment):
-                toastManager.showPaymentSuccess(
-                    direction: isOutgoingPayment(payment) ? .sent : .received
-                )
-
             case .paymentFailed(let payment):
-                toastManager.showPaymentFailure(
-                    direction: isOutgoingPayment(payment) ? .sent : .received
-                )
+                let isOutgoing = isOutgoingPayment(payment)
+                if !(isOutgoing && consumeSuppressedOutgoingFailureToastIfNeeded(paymentId: payment.id)) {
+                    toastManager.showPaymentFailure(
+                        direction: isOutgoing ? .sent : .received
+                    )
+                }
 
             default:
                 break
@@ -130,16 +138,18 @@ extension WalletManager {
             }
 
             var destinationPubkey: String?
+            var paymentHash: String?
             if case let .lightning(
                 description: _,
                 invoice: _,
                 destinationPubkey: destinationPubkeyValue,
-                htlcDetails: _,
+                htlcDetails: htlcDetails,
                 lnurlPayInfo: _,
                 lnurlWithdrawInfo: _,
                 lnurlReceiveMetadata: _
             ) = payment.details {
                 destinationPubkey = destinationPubkeyValue
+                paymentHash = normalizedRewardPaymentHash(htlcDetails.paymentHash)
             }
 
             let dedupeKey = payment.id
@@ -170,20 +180,23 @@ extension WalletManager {
                 network = "lightning"
             }
 
-            postRewardSpend(
-                walletManager: self,
-                authManager: authManager,
-                direction: direction,
-                usdAmountCents: usdAmountCents,
-                btcAmountSats: btcAmountSats,              // NEW
-                destinationPubkey: destinationPubkey,
-                network: network,
-                status: "Completed",
-                onSuccess: { _ in },
-                onError: { [weak self] message in
-                    self?.lastErrorMessage = message
-                }
-            )
+            if direction == "sent", network == "lightning" {
+                postRewardSpend(
+                    walletManager: self,
+                    authManager: authManager,
+                    direction: direction,
+                    usdAmountCents: usdAmountCents,
+                    btcAmountSats: btcAmountSats,              // NEW
+                    destinationPubkey: destinationPubkey,
+                    network: network,
+                    status: "Completed",
+                    paymentHash: paymentHash,
+                    onSuccess: { _ in },
+                    onError: { [weak self] message in
+                        self?.lastErrorMessage = message
+                    }
+                )
+            }
 
         default:
             break
@@ -215,4 +228,3 @@ extension WalletManager {
         scheduleRefresh()
     }
 }
-

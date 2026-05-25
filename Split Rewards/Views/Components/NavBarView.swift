@@ -2,6 +2,7 @@
 //  NavBarView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 1/20/25.
 //
 
 import SwiftUI
@@ -14,7 +15,7 @@ struct NavBarView: View {
     @Binding var selectedTab: Tab
 
     enum Tab {
-        case wallet, rewards, feed, messages
+        case wallet, rewards, promos, messages
     }
 
     private let pink = Color.splitBrandPink
@@ -85,13 +86,11 @@ struct NavBarView: View {
                 .disabled(!hasWallet)
                 .opacity(hasWallet ? 1 : 0.35)
 
-            POSFeedView()
+            NearbyCouponsView()
                 .tabItem {
-                    Label("Feed", systemImage: "circle.rectangle.filled.pattern.diagonalline")
+                    Label("Promos", systemImage: "tag.fill")
                 }
-                .tag(Tab.feed)
-                .disabled(!hasWallet)
-                .opacity(hasWallet ? 1 : 0.35)
+                .tag(Tab.promos)
 
             MessageView()
                 .tabItem {
@@ -114,4 +113,3 @@ struct NavBarView: View {
         }
     }
 }
-

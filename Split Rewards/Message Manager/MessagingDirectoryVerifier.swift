@@ -2,6 +2,7 @@
 //  MessagingDirectoryVerifier.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 4/1/26.
 //
 
 import Foundation

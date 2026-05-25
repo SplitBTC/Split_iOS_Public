@@ -2,6 +2,7 @@
 //  SendMessage.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/20/26.
 //
 
 import Foundation
@@ -605,9 +606,9 @@ enum MessagingSendCoordinator {
         clientMessageId: String,
         walletManager: WalletManager
     ) async throws -> String {
-        let senderEnvelopeSignatureVersion = 2
+        let messageSignatureVersion = 2
         let canonicalEnvelopeMessage = MessageKeyBindingVerifier.buildMessagingEnvelopeSignatureMessage(
-            version: senderEnvelopeSignatureVersion,
+            version: messageSignatureVersion,
             clientMessageId: clientMessageId,
             senderBinding: senderBinding,
             recipientWalletPubkey: recipient.walletPubkey,
@@ -618,18 +619,21 @@ enum MessagingSendCoordinator {
             createdAtClientMs: createdAtClientMs,
             envelopeVersion: envelopeVersion
         )
-        let signedEnvelope = try await walletManager.signAuthMessage(canonicalEnvelopeMessage)
-        guard signedEnvelope.pubkey
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() == senderBinding.walletPubkey.lowercased() else {
-            throw MessageKeyManager.MessageKeyError.invalidResponse
-        }
+        let signingCertificate = try await MessageKeyManager.shared.currentMessageSigningCertificate(
+            senderBinding: senderBinding,
+            walletManager: walletManager
+        )
+        let messageSignature = try MessageKeyManager.shared.signMessageEnvelope(canonicalEnvelopeMessage)
 
         let sealedPayload = SealedSenderMessagePayload(
             body: plaintext,
             sender: senderBinding,
-            senderEnvelopeSignature: signedEnvelope.signature,
-            senderEnvelopeSignatureVersion: senderEnvelopeSignatureVersion
+            messagingSigningPubkey: signingCertificate.messagingSigningPubkey,
+            messagingSigningPubkeySignature: signingCertificate.messagingSigningPubkeySignature,
+            messagingSigningPubkeySignatureVersion: signingCertificate.messagingSigningPubkeySignatureVersion,
+            messagingSigningPubkeySignedAt: signingCertificate.messagingSigningPubkeySignedAt,
+            messageSignature: messageSignature,
+            messageSignatureVersion: messageSignatureVersion
         )
         let sealedPayloadData = try JSONEncoder().encode(sealedPayload)
         guard let sealedPayloadString = String(data: sealedPayloadData, encoding: .utf8) else {

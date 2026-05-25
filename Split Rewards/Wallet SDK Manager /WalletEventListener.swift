@@ -2,6 +2,7 @@
 //  WalletEventListener.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 12/05/25.
 //
 
 import Foundation

@@ -2,6 +2,7 @@
 //  PaymentLockedSheetView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 10/17/25.
 //
 import SwiftUI
 import SafariServices

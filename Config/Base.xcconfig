@@ -1,3 +1,9 @@
 // Shared base configuration for Split Rewards.
 // Use Debug.xcconfig / Release.xcconfig and optional local overrides to set
 // BASE_SCHEME and BASE_HOST for each build configuration.
+
+// Public-safe signing and shared container placeholders.
+// Replace these privately for real signed builds.
+SPLIT_KEYCHAIN_SERVICE = com.example.SplitRewards
+SPLIT_SHARED_APP_GROUP_IDENTIFIER = group.com.example.splitrewards.share
+SPLIT_SHARED_KEYCHAIN_GROUP_SUFFIX = com.example.splitrewards.shared

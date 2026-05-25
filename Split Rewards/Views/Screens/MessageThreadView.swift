@@ -2,6 +2,7 @@
 //  MessageThreadView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/21/26.
 //
 
 import SwiftUI
@@ -12,6 +13,9 @@ struct MessageThreadView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var walletManager: WalletManager
+    @EnvironmentObject private var lndWalletManager: LNDWalletManager
+    @EnvironmentObject private var nwcWalletManager: NWCWalletManager
+    @EnvironmentObject private var activeSpendWalletStore: ActiveSpendWalletStore
     @EnvironmentObject var authManager: AuthManager
     @ObservedObject private var messageStore = MessageStore.shared
     @ObservedObject private var attachmentManager = MessageAttachmentManager.shared
@@ -22,6 +26,7 @@ struct MessageThreadView: View {
     let initialScrollMessageId: String?
 
     @FocusState private var composerFocused: Bool
+    @GestureState private var timestampRevealDragOffset: CGFloat = 0
 
     @State private var draftMessage = ""
     @State private var isSending = false
@@ -53,6 +58,7 @@ struct MessageThreadView: View {
     private let composerSurface = Color.white.opacity(0.08)
     private let bottomBarSurface = Color.splitCardSurface
     private let bottomMessageInset: CGFloat = 18
+    private let timestampRevealWidth: CGFloat = 74
 
     private struct SendDestination: Hashable, Identifiable {
         let paymentRequest: String
@@ -92,6 +98,19 @@ struct MessageThreadView: View {
     private var visibleConversationMessages: [StoredMessage] {
         conversationMessages.filter { message in
             message.messageType != "payment_request_paid" && message.messageType != "reaction"
+        }
+    }
+
+    private struct IndexedVisibleMessage: Identifiable {
+        let index: Int
+        let message: StoredMessage
+
+        var id: String { message.id }
+    }
+
+    private var indexedVisibleConversationMessages: [IndexedVisibleMessage] {
+        visibleConversationMessages.enumerated().map { index, message in
+            IndexedVisibleMessage(index: index, message: message)
         }
     }
 
@@ -161,6 +180,15 @@ struct MessageThreadView: View {
         keyboardHeight > 0 ? bottomMessageInset + 12 : bottomMessageInset
     }
 
+    private var timestampRevealAmount: CGFloat {
+        min(max(timestampRevealDragOffset, 0), timestampRevealWidth)
+    }
+
+    private var timestampRevealProgress: CGFloat {
+        guard timestampRevealWidth > 0 else { return 0 }
+        return timestampRevealAmount / timestampRevealWidth
+    }
+
     private var canSend: Bool {
         let hasDraftText = !draftMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return lightningAddress != nil && activeBlock == nil && hasDraftText
@@ -174,55 +202,22 @@ struct MessageThreadView: View {
     }
 
     var body: some View {
+        configuredBody(content: threadContent)
+    }
+
+    private var threadContent: some View {
         ZStack {
             background
                 .ignoresSafeArea()
 
             ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 12) {
-                        ForEach(visibleConversationMessages) { message in
-                            bubbleRow(for: message)
-                                .id(message.id)
-                        }
-
-                        Color.clear
-                            .frame(height: activeBottomMessageInset)
-                            .id(bottomScrollAnchorId)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 12)
-                    .padding(.bottom, 24)
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .onAppear {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        scrollToInitialPositionIfNeeded(using: proxy)
-                    }
-
-                    if initialScrollMessageId == nil {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            composerFocused = true
-                        }
-                    }
-                }
-                .onChange(of: visibleConversationMessages.count) { _, _ in
-                    if !scrollToInitialPositionIfNeeded(using: proxy) {
-                        scrollToBottom(using: proxy, animated: true)
-                    }
-                    markConversationAsRead()
-                }
-                .onChange(of: keyboardHeight) { _, _ in
-                    scrollToBottom(using: proxy, animated: true)
-                }
-                .onChange(of: composerFocused) { _, isFocused in
-                    guard isFocused else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        scrollToBottom(using: proxy, animated: true)
-                    }
-                }
+                conversationScrollView(using: proxy)
             }
         }
+    }
+
+    private func configuredBody<Content: View>(content: Content) -> some View {
+        content
         .safeAreaInset(edge: .top, spacing: 0) {
             header
         }
@@ -272,6 +267,9 @@ struct MessageThreadView: View {
                         onSent: {}
                     )
                     .environmentObject(walletManager)
+                    .environmentObject(lndWalletManager)
+                    .environmentObject(nwcWalletManager)
+                    .environmentObject(activeSpendWalletStore)
                     .environmentObject(authManager)
                 }
             }
@@ -302,6 +300,7 @@ struct MessageThreadView: View {
             }
         }
         .task(id: conversationId) {
+            MessageThreadPresenceTracker.shared.enterConversation(conversationId)
             await refreshThread(force: true)
             markConversationAsRead()
             await refreshCurrentWalletPubkey()
@@ -310,12 +309,16 @@ struct MessageThreadView: View {
             await refreshProfilePic()
         }
         .onAppear {
+            MessageThreadPresenceTracker.shared.enterConversation(conversationId)
             Task {
                 await refreshCurrentWalletPubkey()
                 await refreshContactState()
                 await refreshBlockState()
                 await refreshProfilePic()
             }
+        }
+        .onDisappear {
+            MessageThreadPresenceTracker.shared.leaveConversation(conversationId)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             keyboardHeight = keyboardHeight(from: notification)
@@ -350,6 +353,65 @@ struct MessageThreadView: View {
                 composerFocused = false
             }
         }
+    }
+
+    private func conversationScrollView(using proxy: ScrollViewProxy) -> some View {
+        ScrollView(showsIndicators: false) {
+            LazyVStack(spacing: 12) {
+                ForEach(indexedVisibleConversationMessages) { entry in
+                    if shouldShowDaySeparator(
+                        for: entry.message,
+                        previousMessage: previousVisibleMessage(before: entry.index)
+                    ) {
+                        messageDaySeparator(for: entry.message.createdAt)
+                            .id("day-separator-\(entry.message.id)")
+                    }
+
+                    bubbleRow(for: entry.message)
+                        .id(entry.message.id)
+                }
+
+                Color.clear
+                    .frame(height: activeBottomMessageInset)
+                    .id(bottomScrollAnchorId)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .simultaneousGesture(timestampRevealGesture)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                scrollToInitialPositionIfNeeded(using: proxy)
+            }
+
+            if initialScrollMessageId == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    composerFocused = true
+                }
+            }
+        }
+        .onChange(of: visibleConversationMessages.count) { _, _ in
+            if !scrollToInitialPositionIfNeeded(using: proxy) {
+                scrollToBottom(using: proxy, animated: true)
+            }
+            markConversationAsRead()
+        }
+        .onChange(of: keyboardHeight) { _, _ in
+            scrollToBottom(using: proxy, animated: true)
+        }
+        .onChange(of: composerFocused) { _, isFocused in
+            guard isFocused else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                scrollToBottom(using: proxy, animated: true)
+            }
+        }
+    }
+
+    private func previousVisibleMessage(before index: Int) -> StoredMessage? {
+        guard index > 0 else { return nil }
+        return indexedVisibleConversationMessages[index - 1].message
     }
 
     private var header: some View {
@@ -521,7 +583,7 @@ struct MessageThreadView: View {
                     .lineLimit(1...5)
                     .textInputAutocapitalization(.sentences)
                     .foregroundColor(.white)
-                    .disabled(lightningAddress == nil || activeBlock != nil || isSending)
+                    .disabled(lightningAddress == nil || activeBlock != nil)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .background(
@@ -563,6 +625,117 @@ struct MessageThreadView: View {
         )
     }
 
+    private var timestampRevealGesture: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            .updating($timestampRevealDragOffset) { value, state, transaction in
+                transaction.animation = .interactiveSpring(response: 0.24, dampingFraction: 0.88)
+
+                let horizontalTranslation = value.translation.width
+                let verticalTranslation = value.translation.height
+
+                guard horizontalTranslation < 0,
+                      abs(horizontalTranslation) > abs(verticalTranslation) else {
+                    state = 0
+                    return
+                }
+
+                state = min(-horizontalTranslation, timestampRevealWidth)
+            }
+    }
+
+    @ViewBuilder
+    private func messageDaySeparator(for date: Date) -> some View {
+        Text(daySeparatorText(for: date))
+            .font(.caption.weight(.semibold))
+            .foregroundColor(.white.opacity(0.48))
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.055))
+            )
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+            .accessibilityLabel(daySeparatorAccessibilityText(for: date))
+    }
+
+    private func timestampRevealRow<Content: View>(
+        for message: StoredMessage,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let progress = timestampRevealProgress
+
+        return ZStack(alignment: .trailing) {
+            content()
+                .frame(maxWidth: .infinity)
+                .offset(x: -timestampRevealAmount)
+
+            Text(messageTimeText(for: message.createdAt))
+                .font(.caption2.weight(.semibold))
+                .foregroundColor(.white.opacity(0.48))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(width: timestampRevealWidth, alignment: .trailing)
+                .padding(.trailing, 2)
+                .opacity(progress)
+                .offset(x: (1 - progress) * 10)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityHint("Sent \(messageTimestampAccessibilityText(for: message.createdAt))")
+    }
+
+    private func shouldShowDaySeparator(
+        for message: StoredMessage,
+        previousMessage: StoredMessage?
+    ) -> Bool {
+        guard let previousMessage else { return true }
+        return !Calendar.current.isDate(message.createdAt, inSameDayAs: previousMessage.createdAt)
+    }
+
+    private func daySeparatorText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = .current
+        formatter.locale = .current
+        formatter.timeZone = .current
+        formatter.dateFormat = "EEEE M/d/yy"
+        return formatter.string(from: date)
+    }
+
+    private func daySeparatorAccessibilityText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = .current
+        formatter.locale = .current
+        formatter.timeZone = .current
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+
+    private func messageTimeText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = .current
+        formatter.locale = .current
+        formatter.timeZone = .current
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func messageTimestampAccessibilityText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = .current
+        formatter.locale = .current
+        formatter.timeZone = .current
+        formatter.dateStyle = .full
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
     @ViewBuilder
     private func bubbleRow(for message: StoredMessage) -> some View {
         if message.messageType == "payment_request",
@@ -584,7 +757,6 @@ struct MessageThreadView: View {
                 reactionDecoratedRow(for: message) {
                     HStack {
                         if message.isIncoming {
-                            Spacer(minLength: 48)
                             messageText(for: message.body)
                                 .font(.body)
                                 .foregroundColor(.white)
@@ -595,7 +767,9 @@ struct MessageThreadView: View {
                                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                                         .fill(incomingBlue)
                                 )
+                            Spacer(minLength: 48)
                         } else {
+                            Spacer(minLength: 48)
                             messageText(for: message.body)
                                 .font(.body)
                                 .foregroundColor(.white)
@@ -606,7 +780,6 @@ struct MessageThreadView: View {
                                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                                         .fill(outgoingPink)
                                 )
-                            Spacer(minLength: 48)
                         }
                     }
                 }
@@ -620,10 +793,12 @@ struct MessageThreadView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(
-            alignment: message.isIncoming ? .trailing : .leading,
+            alignment: message.isIncoming ? .leading : .trailing,
             spacing: 6
         ) {
-            content()
+            timestampRevealRow(for: message) {
+                content()
+            }
 
             if !message.isIncoming, message.deliveryState == .failedSameKey {
                 Button(action: {
@@ -647,9 +822,10 @@ struct MessageThreadView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(retryingFailedMessageIds.contains(message.id) || activeBlock != nil)
+                .offset(x: -timestampRevealAmount)
             }
         }
-        .frame(maxWidth: .infinity, alignment: message.isIncoming ? .trailing : .leading)
+        .frame(maxWidth: .infinity, alignment: message.isIncoming ? .leading : .trailing)
     }
 
     @ViewBuilder
@@ -661,11 +837,11 @@ struct MessageThreadView: View {
         let baseContent = content()
             .padding(.bottom, reactions.isEmpty ? 0 : 12)
             .overlay(
-                alignment: message.isIncoming ? .bottomTrailing : .bottomLeading
+                alignment: message.isIncoming ? .bottomLeading : .bottomTrailing
             ) {
                 if !reactions.isEmpty {
                     reactionBadge(reactions)
-                        .offset(x: message.isIncoming ? 6 : -6, y: 6)
+                        .offset(x: message.isIncoming ? -6 : 6, y: 6)
                         .zIndex(1)
                         .allowsHitTesting(false)
                 }
@@ -684,7 +860,6 @@ struct MessageThreadView: View {
     private func attachmentRow(for message: StoredMessage, payload: AttachmentMessagePayload) -> some View {
         HStack {
             if message.isIncoming {
-                Spacer(minLength: 36)
                 Button(action: {
                     Task {
                         await openAttachment(for: message, payload: payload)
@@ -694,7 +869,9 @@ struct MessageThreadView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isAttachmentBusy(payload))
+                Spacer(minLength: 36)
             } else {
+                Spacer(minLength: 36)
                 Button(action: {
                     Task {
                         await openAttachment(for: message, payload: payload)
@@ -704,7 +881,6 @@ struct MessageThreadView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isAttachmentBusy(payload))
-                Spacer(minLength: 36)
             }
         }
     }
@@ -792,7 +968,6 @@ struct MessageThreadView: View {
 
         HStack {
             if message.isIncoming {
-                Spacer(minLength: 36)
                 Button(action: {
                     guard !isPaid else { return }
                     sendDestination = SendDestination(paymentRequest: payload.invoice)
@@ -801,9 +976,10 @@ struct MessageThreadView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isPaid)
-            } else {
-                card
                 Spacer(minLength: 36)
+            } else {
+                Spacer(minLength: 36)
+                card
             }
         }
     }
@@ -991,7 +1167,8 @@ struct MessageThreadView: View {
 
         guard let lightningAddress else { return }
 
-        let trimmed = draftMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let submittedDraft = draftMessage
+        let trimmed = submittedDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         isSending = true
@@ -1004,7 +1181,9 @@ struct MessageThreadView: View {
                 authManager: authManager,
                 walletManager: walletManager
             )
-            draftMessage = ""
+            if draftMessage == submittedDraft {
+                draftMessage = ""
+            }
         } catch {
             sendError = error.localizedDescription
         }

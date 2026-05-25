@@ -2,22 +2,18 @@
 //  MainTemplateView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 1/20/25.
 //
 
 import SwiftUI
 
 struct MainTemplateView: View {
-    @EnvironmentObject var appState: AppState
     @EnvironmentObject var walletManager: WalletManager
     @EnvironmentObject var authManager: AuthManager
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var messagingNotificationRouter = MessagingNotificationRouter.shared
 
     @State private var selectedTab: NavBarView.Tab = .wallet
-    @State private var liveMessageSyncTask: Task<Void, Never>?
-    @State private var keyboardVisible = false
-
-    private let liveMessageSyncIntervalNanoseconds: UInt64 = 2_000_000_000
 
     var body: some View {
         ZStack {
@@ -36,7 +32,6 @@ struct MainTemplateView: View {
         .task {
             await syncMessagesIfPossible(force: true)
             await syncOutgoingStatusesIfPossible(force: true)
-            startLiveMessageSyncLoop()
             activateMessagesTabIfNeeded()
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -45,42 +40,16 @@ struct MainTemplateView: View {
                     await syncMessagesIfPossible(force: true)
                     await syncOutgoingStatusesIfPossible(force: true)
                 }
-                startLiveMessageSyncLoop()
-            } else {
-                liveMessageSyncTask?.cancel()
-                liveMessageSyncTask = nil
             }
         }
         .onChange(of: messagingNotificationRouter.pendingRoute?.id) { _, _ in
             activateMessagesTabIfNeeded()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            keyboardVisible = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            keyboardVisible = false
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .proofOfSpendPostDidCreate)) { _ in
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                selectedTab = .feed
-            }
-        }
-        .onDisappear {
-            liveMessageSyncTask?.cancel()
-            liveMessageSyncTask = nil
         }
     }
 
     @MainActor
     private func syncMessagesIfPossible(force: Bool) async {
         guard case .ready = walletManager.state else { return }
-        SharedOutgoingMessageRelayStore.importPendingMessages()
-        await MessagingDeviceTokenManager.shared.syncDeviceTokenIfPossible(
-            authManager: authManager,
-            walletManager: walletManager,
-            force: force
-        )
         await MessageSyncManager.shared.syncInboxIfPossible(
             authManager: authManager,
             walletManager: walletManager,
@@ -98,21 +67,6 @@ struct MainTemplateView: View {
             force: force
         )
         _ = await MessagingPushSyncCoordinator.shared.processPendingPushIfPossible()
-    }
-
-    @MainActor
-    private func startLiveMessageSyncLoop() {
-        liveMessageSyncTask?.cancel()
-
-        liveMessageSyncTask = Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: liveMessageSyncIntervalNanoseconds)
-                guard !Task.isCancelled else { break }
-                guard scenePhase == .active else { continue }
-                guard !keyboardVisible else { continue }
-                await syncMessagesIfPossible(force: true)
-            }
-        }
     }
 
     @MainActor

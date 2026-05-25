@@ -2,6 +2,7 @@
 //  PostMerchantPubkeyReport.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/24/26.
 //
 
 import Foundation
@@ -35,27 +36,13 @@ func postMerchantPubkeyReport(
         let merchantName: String
         let merchantAddress: String
         let destinationPubkey: String
-        let transactionId: String
-        let amountSats: Int64
-        let status: String
-        let network: String
-        let method: String
-        let note: String
-        let transactionDate: String
     }
 
     request.httpBody = try JSONEncoder().encode(
         RequestBody(
             merchantName: merchantName.trimmingCharacters(in: .whitespacesAndNewlines),
             merchantAddress: merchantAddress.trimmingCharacters(in: .whitespacesAndNewlines),
-            destinationPubkey: destinationPubkey,
-            transactionId: transaction.id,
-            amountSats: transaction.amountSats,
-            status: transaction.status,
-            network: transaction.network,
-            method: transaction.method,
-            note: transaction.note,
-            transactionDate: transaction.dateString
+            destinationPubkey: destinationPubkey
         )
     )
 

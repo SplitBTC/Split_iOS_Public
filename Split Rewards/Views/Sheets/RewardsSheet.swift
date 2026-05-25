@@ -2,6 +2,7 @@
 //  RewardsSheet.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 2/7/26.
 //
 import SwiftUI
 
@@ -50,21 +51,11 @@ struct RewardsHowItWorksSheet: View {
                             .foregroundColor(.white.opacity(0.88))
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Text("You earn a share of the Bitcoin pool two ways:")
+                        Text("You earn a share of the Bitcoin pool based on the Bitcoin you spend with verified merchants.")
                             .font(.system(size: 14, weight: .regular))
                             .foregroundColor(.white.opacity(0.88))
                             .fixedSize(horizontal: false, vertical: true)
                         
-                        Text("1. You get credited for all of the Bitcoin you spend with verified merchants.")
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(.white.opacity(0.88))
-                            .fixedSize(horizontal: false, vertical: true)
-                        
-                        Text("2. You get credited 10% of spend for eligible Bitcoin purchases via our on-ramp.")
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(.white.opacity(0.88))
-                            .fixedSize(horizontal: false, vertical: true)
-
                         Text("Your Bitcoin reward is determined by your percentage of spend relative to the platform. If you account for 5% of the platform's reward eligible spending, you receive 5% of the Bitcoin rewards pot.")
                             .font(.system(size: 14, weight: .regular))
                             .foregroundColor(.white.opacity(0.88))
@@ -91,7 +82,7 @@ struct RewardsHowItWorksSheet: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundColor(.white.opacity(0.85))
 
-                                Text("Rewards are based on Bitcoin spent with verified merchants listed in the app and eligible on-ramp Bitcoin purchases.")
+                                Text("Rewards are based on Bitcoin spent with verified merchants listed in the app.")
                                     .font(.caption)
                                     .foregroundColor(.white.opacity(0.65))
                                     .fixedSize(horizontal: false, vertical: true)

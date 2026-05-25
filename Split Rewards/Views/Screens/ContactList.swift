@@ -2,6 +2,7 @@
 //  ContactList.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/22/26.
 //
 
 import SwiftUI
@@ -248,7 +249,6 @@ struct ContactList: View {
             contacts = loaded.sorted {
                 $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
-            syncSharedRecipientCache()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -285,28 +285,6 @@ struct ContactList: View {
         }
 
         profilePicUrlsByIdentifier = updated
-        syncSharedRecipientCache()
-    }
-
-    private func syncSharedRecipientCache() {
-        let records = contacts.map { contact in
-            let lightningAddress = contact.paymentIdentifier
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-
-            return SharedMessageRecipientRecord(
-                lightningAddress: lightningAddress,
-                displayName: contact.name,
-                profilePicURL: profilePicUrlsByIdentifier[lightningAddress],
-                lastInteractedAt: contact.updatedAt,
-                source: .contact
-            )
-        }
-
-        SharedMessageRecipientCache.store(
-            contacts: records,
-            conversations: []
-        )
     }
 }
 

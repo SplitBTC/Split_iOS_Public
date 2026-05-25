@@ -2,6 +2,7 @@
 //  LegalView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 1/17/25.
 //
 import SwiftUI
 import JWTDecode

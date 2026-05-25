@@ -19,7 +19,7 @@ struct AddMerchantView: View {
                             .font(.system(size: 30, weight: .bold))
                             .foregroundColor(.white)
 
-                        Text("Help us add any bitcoin-accepting business to our rewards program.")
+                        Text("You can add any bitcoin-accepting business to our rewards program.")
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.68))
                             .fixedSize(horizontal: false, vertical: true)
@@ -31,7 +31,7 @@ struct AddMerchantView: View {
                         stepRow(
                             number: "1",
                             title: "Make a normal bitcoin payment",
-                            detail: "Pay the merchant with Split like a normal transaciton. No special checkout flow is needed."
+                            detail: "Pay the merchant with Split like a normal transaction."
                         )
 
                         stepRow(
@@ -63,7 +63,7 @@ struct AddMerchantView: View {
                             .font(.headline.weight(.semibold))
                             .foregroundColor(.white)
 
-                        Text("This works for any business that accepts Bitcoin. Once approved, your spend will start earning Bitcoin rewards there.")
+                        Text("This works for any business that accepts Bitcoin. Once approved, your spend with that merchant will start earning Bitcoin rewards.")
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.72))
                             .fixedSize(horizontal: false, vertical: true)

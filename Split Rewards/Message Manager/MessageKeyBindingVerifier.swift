@@ -2,6 +2,7 @@
 //  MessageKeyBindingVerifier.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/21/26.
 //
 
 import Foundation
@@ -32,7 +33,9 @@ enum MessageRecipientTrustStore {
         }
     }
 
-    private static let pinnedRecipientsDefaultsKey = "split.messaging.trustedRecipientsByLightningAddress"
+    private static var pinnedRecipientsDefaultsKey: String {
+        "split.messaging.trustedRecipientsByLightningAddress.\(AppConfig.messagingPushEnvironment)"
+    }
 
     static func enforceOrPin(_ binding: MessagingIdentityBindingPayload) throws {
         let normalizedLightningAddress = try normalizeLightningAddress(binding.lightningAddress)
@@ -102,6 +105,7 @@ enum MessageKeyBindingVerifier {
         case unsupportedSignatureVersion
         case unsupportedEnvelopeSignatureVersion
         case invalidWalletPubkey
+        case invalidMessagingSigningPubkey
         case invalidSignatureEncoding
         case invalidSignature
         case invalidEnvelopeSignature
@@ -120,6 +124,8 @@ enum MessageKeyBindingVerifier {
                 return "Unsupported messaging envelope signature version."
             case .invalidWalletPubkey:
                 return "Recipient wallet pubkey is invalid."
+            case .invalidMessagingSigningPubkey:
+                return "Sender messaging signing key is invalid."
             case .invalidSignatureEncoding:
                 return "Recipient messaging identity signature format is invalid."
             case .invalidSignature:
@@ -230,6 +236,49 @@ enum MessageKeyBindingVerifier {
         deviceToken=\(deviceToken)
         signedAt=\(signedAt)
         """
+    }
+
+    static func buildMessagingSigningKeyBindingMessage(
+        version: Int,
+        walletPubkey: String,
+        lightningAddress: String,
+        messagingPubkey: String,
+        messagingSigningPubkey: String,
+        signedAt: Int
+    ) -> String {
+        """
+        SplitRewards Messaging Signing Key Authorization
+        version=\(version)
+        domain=\(messagingIdentityDomain)
+        walletPubkey=\(walletPubkey)
+        lightningAddress=\(lightningAddress)
+        messagingPubkey=\(messagingPubkey)
+        messagingSigningPubkey=\(messagingSigningPubkey)
+        signedAt=\(signedAt)
+        """
+    }
+
+    static func verifyMessagingSigningCertificate(
+        _ certificate: MessageSigningCertificate
+    ) throws {
+        guard certificate.messagingSigningPubkeySignatureVersion == 1 else {
+            throw VerificationError.unsupportedSignatureVersion
+        }
+
+        let canonicalMessage = buildMessagingSigningKeyBindingMessage(
+            version: certificate.messagingSigningPubkeySignatureVersion,
+            walletPubkey: certificate.walletPubkey,
+            lightningAddress: certificate.lightningAddress,
+            messagingPubkey: certificate.messagingPubkey,
+            messagingSigningPubkey: certificate.messagingSigningPubkey,
+            signedAt: certificate.messagingSigningPubkeySignedAt
+        )
+        try verifySignedMessage(
+            canonicalMessage,
+            signatureHex: certificate.messagingSigningPubkeySignature,
+            walletPubkey: certificate.walletPubkey,
+            invalidSignatureError: .invalidSignature
+        )
     }
 
     static func buildMessagingEnvelopeSignatureMessage(
@@ -344,7 +393,7 @@ enum MessageKeyBindingVerifier {
         _ message: InboxMessage,
         sealedPayload: SealedSenderMessagePayload
     ) throws {
-        guard supportedEnvelopeSignatureVersions.contains(sealedPayload.senderEnvelopeSignatureVersion) else {
+        guard supportedEnvelopeSignatureVersions.contains(sealedPayload.messageSignatureVersion) else {
             throw VerificationError.unsupportedEnvelopeSignatureVersion
         }
 
@@ -353,9 +402,20 @@ enum MessageKeyBindingVerifier {
         }
 
         try verifyBinding(sealedPayload.sender)
+        try verifyMessagingSigningCertificate(
+            MessageSigningCertificate(
+                walletPubkey: sealedPayload.sender.walletPubkey,
+                lightningAddress: sealedPayload.sender.lightningAddress,
+                messagingPubkey: sealedPayload.sender.messagingPubkey,
+                messagingSigningPubkey: sealedPayload.messagingSigningPubkey,
+                messagingSigningPubkeySignature: sealedPayload.messagingSigningPubkeySignature,
+                messagingSigningPubkeySignatureVersion: sealedPayload.messagingSigningPubkeySignatureVersion,
+                messagingSigningPubkeySignedAt: sealedPayload.messagingSigningPubkeySignedAt
+            )
+        )
 
         let canonicalMessage = buildMessagingEnvelopeSignatureMessage(
-            version: sealedPayload.senderEnvelopeSignatureVersion,
+            version: sealedPayload.messageSignatureVersion,
             clientMessageId: message.clientMessageId,
             senderBinding: sealedPayload.sender,
             recipientWalletPubkey: message.recipientWalletPubkey,
@@ -366,13 +426,36 @@ enum MessageKeyBindingVerifier {
             createdAtClientMs: createdAtClientMs,
             envelopeVersion: message.envelopeVersion
         )
-
-        try verifySignedMessage(
+        try verifyMessagingSignature(
             canonicalMessage,
-            signatureHex: sealedPayload.senderEnvelopeSignature,
-            walletPubkey: sealedPayload.sender.walletPubkey,
-            invalidSignatureError: .invalidEnvelopeSignature
+            signatureHex: sealedPayload.messageSignature,
+            messagingSigningPubkey: sealedPayload.messagingSigningPubkey
         )
+    }
+
+    private static func verifyMessagingSignature(
+        _ canonicalMessage: String,
+        signatureHex: String,
+        messagingSigningPubkey: String
+    ) throws {
+        guard let pubkeyData = strictHexData(messagingSigningPubkey) else {
+            throw VerificationError.invalidMessagingSigningPubkey
+        }
+
+        guard let signatureData = strictHexData(signatureHex) else {
+            throw VerificationError.invalidSignatureEncoding
+        }
+
+        let publicKey: Curve25519.Signing.PublicKey
+        do {
+            publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: pubkeyData)
+        } catch {
+            throw VerificationError.invalidMessagingSigningPubkey
+        }
+
+        guard publicKey.isValidSignature(signatureData, for: Data(canonicalMessage.utf8)) else {
+            throw VerificationError.invalidEnvelopeSignature
+        }
     }
 
     private static func compactSignatureCandidates(from signatureHex: String) throws -> [[UInt8]] {

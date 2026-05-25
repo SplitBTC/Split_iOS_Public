@@ -2,6 +2,7 @@
 //  PostRewardSpend.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 12/6/25.
 //
 
 import Foundation
@@ -31,6 +32,7 @@ func postRewardSpend(
     destinationPubkey: String?,     // merchant pubkey (if available/needed)
     network: String,                // "lightning" | "onchain" | "swap"
     status: String,                 // "Pending" | "Completed" | "Failed"
+    paymentHash: String? = nil,
 
     onSuccess: ((RewardSpendResponse) -> Void)? = nil,
     onError: ((String) -> Void)? = nil
@@ -61,6 +63,7 @@ func postRewardSpend(
             let destinationPubkey: String?
             let network: String
             let status: String
+            let paymentHash: String?
         }
 
         let body = RequestBody(
@@ -69,7 +72,8 @@ func postRewardSpend(
             btcAmountSats: btcAmountSats,       // NEW
             destinationPubkey: destinationPubkey,
             network: network,
-            status: status
+            status: status,
+            paymentHash: paymentHash
         )
 
         do {
@@ -124,7 +128,6 @@ func postRewardSpend(
         .resume()
     }
 }
-
 
 
 

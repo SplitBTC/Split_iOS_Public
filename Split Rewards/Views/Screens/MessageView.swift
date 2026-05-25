@@ -2,6 +2,7 @@
 //  MessageView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/20/26.
 //
 
 import SwiftUI
@@ -19,6 +20,7 @@ struct MessageView: View {
     @State private var profilePicUrlsByIdentifier: [String: String] = [:]
     @State private var navigationPath: [ActiveThreadDestination] = []
     @State private var showComposeSheet = false
+    @State private var showMessagingInfoSheet = false
     @State private var pendingThreadAfterCompose: ActiveThreadDestination?
 
     private struct ActiveThreadDestination: Hashable, Identifiable {
@@ -108,6 +110,11 @@ struct MessageView: View {
             .environmentObject(walletManager)
             .environmentObject(authManager)
         }
+        .sheet(isPresented: $showMessagingInfoSheet) {
+            MessagingPrivacyInfoSheet(pink: composePink)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
         .task {
             await refreshContactNames()
             await refreshConversationProfilePics()
@@ -157,9 +164,20 @@ struct MessageView: View {
                 .buttonStyle(.plain)
             }
 
-            Text("Encrypted conversations.")
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.58))
+            HStack(alignment: .center, spacing: 6) {
+                Text("Encrypted conversations.")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.58))
+
+                Button(action: { showMessagingInfoSheet = true }) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.62))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("How Split messaging works")
+            }
         }
         .padding(.horizontal, 18)
         .padding(.top, 20)
@@ -547,8 +565,6 @@ struct MessageView: View {
             contactNamesByIdentifier = [:]
             print("Failed to load contact names for message list: \(error.localizedDescription)")
         }
-
-        syncSharedRecipientCache()
     }
 
     @MainActor
@@ -582,44 +598,58 @@ struct MessageView: View {
         }
 
         profilePicUrlsByIdentifier = updated
-        syncSharedRecipientCache()
     }
+}
 
-    private func syncSharedRecipientCache() {
-        let contactRecords = contactNamesByIdentifier.map { entry in
-            SharedMessageRecipientRecord(
-                lightningAddress: entry.key,
-                displayName: entry.value,
-                profilePicURL: profilePicUrlsByIdentifier[entry.key],
-                lastInteractedAt: nil,
-                source: .contact
+private struct MessagingPrivacyInfoSheet: View {
+    let pink: Color
+
+    private let paragraphs = [
+        "Split messages and attachments are end-to-end encrypted. Your device encrypts them before they reach Split, and only the recipient's device is able to decrypt them.",
+        "Split's server is just a relay. It helps route and deliver encrypted messages, but it cannot view message text or attachment contents.",
+        "Before sending, your app verifies the recipient's wallet-signed messaging key. That signature links their wallet, Lightning Address, and encryption key, helping ensure the message is encrypted for the correct Lightning Address.",
+        "Split uses limited delivery metadata while routing pending messages, like sender, recipient, timing, message type, and attachment size. After a message is received, Split deletes the message relay record. Encrypted attachment blobs are stored separately and are deleted after the recipient confirms attachment receipt or they expire."
+    ]
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.splitAppBlack,
+                    Color.splitSurface
+                ],
+                startPoint: .top,
+                endPoint: .bottom
             )
-        }
+            .ignoresSafeArea()
 
-        let conversationRecords: [SharedMessageRecipientRecord] = messageStore.conversationPreviews().compactMap { conversation in
-            guard let lightningAddress = lightningAddress(for: conversation)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased(),
-                  !lightningAddress.isEmpty else {
-                return nil
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "lock.shield.fill")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(pink)
+
+                        Text("End-to-End Encrypted Messages")
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 24)
+                    .padding(.bottom, 8)
+
+                    ForEach(paragraphs, id: \.self) { paragraph in
+                        Text(paragraph)
+                            .font(.system(size: 15, weight: .regular, design: .rounded))
+                            .foregroundColor(.white.opacity(0.88))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            return SharedMessageRecipientRecord(
-                lightningAddress: lightningAddress,
-                displayName: displayTitle(
-                    forLightningAddress: lightningAddress,
-                    fallbackTitle: conversation.title
-                ),
-                profilePicURL: profilePicUrlsByIdentifier[lightningAddress],
-                lastInteractedAt: conversation.latestAt,
-                source: .conversation
-            )
         }
-
-        SharedMessageRecipientCache.store(
-            contacts: contactRecords,
-            conversations: conversationRecords
-        )
     }
 }
 

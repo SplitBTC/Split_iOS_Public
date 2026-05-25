@@ -7,8 +7,8 @@ This app includes:
 - self-custodial Bitcoin wallet flows
 - Lightning address management
 - Split messaging
-- Proof of Spend posting
-- rewards and merchant discovery flows
+- rewards, coupons, merchant discovery, and Bitcoin event flows
+- external Lightning node and Nostr Wallet Connect flows
 
 ## Why This Project Exists
 
@@ -43,10 +43,6 @@ The main app sources live in:
 
 - [Split Rewards](./Split%20Rewards)
 
-The share extension sources live in:
-
-- [Split Share Extension](./Split%20Share%20Extension)
-
 Test targets live in:
 
 - [Split RewardsTests](./Split%20RewardsTests)
@@ -61,7 +57,7 @@ The app uses automatic signing in the project file. If you are building under yo
 - replace the placeholder shared app-group and shared keychain identifiers
 - use your own signing configuration for device/archive builds
 
-This public snapshot includes the main app, the test targets, and the share extension target.
+This public snapshot includes the main app and the test targets.
 
 ## Backend Configuration
 
@@ -87,7 +83,7 @@ Set backend and messaging config with:
 - `MESSAGING_IDENTITY_DOMAIN`
 - `LIGHTNING_ADDRESS_DOMAIN`
 
-The main app reads these values in [AppConfig.swift](./Split%20Rewards/Utilities/AppConfig.swift), and the share extension reads the matching public-safe placeholders from its Info.plist configuration.
+The main app reads these values in [AppConfig.swift](./Split%20Rewards/Utilities/AppConfig.swift).
 
 The public project also uses placeholder values for:
 
@@ -108,7 +104,11 @@ If you are not an authorized developer working against Split infrastructure, poi
 - [Utilities/AppConfig.swift](./Split%20Rewards/Utilities/AppConfig.swift): backend base URL selection
 - [Message Manager](./Split%20Rewards/Message%20Manager): messaging key management, crypto, sync, and storage
 - [Wallet SDK Manager ](./Split%20Rewards/Wallet%20SDK%20Manager%20): wallet lifecycle and seed handling
-- [Split Share Extension](./Split%20Share%20Extension): extension-side messaging and sharing support
+- [NWC Wallet Manager](./Split%20Rewards/NWC%20Wallet%20Manager): Nostr Wallet Connect support
+- [LND Wallet Manager](./Split%20Rewards/LND%20Wallet%20Manager): remote LND node support
+- [Core Lightning Wallet Manager](./Split%20Rewards/Core%20Lightning%20Wallet%20Manager): remote Core Lightning node support
+- [Eclair Wallet Manager](./Split%20Rewards/Eclair%20Wallet%20Manager): remote Eclair node support
+- [Spark Subwallet Manager](./Split%20Rewards/Spark%20Subwallet%20Manager): Spark subwallet support
 - [Views](./Split%20Rewards/Views): app screens and sheets
 
 ## Testing

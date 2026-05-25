@@ -2,6 +2,7 @@
 //  ForceUpdateView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 6/29/25.
 //
 import SwiftUI
 
@@ -18,7 +19,7 @@ struct ForcedUpdateView: View {
                 .padding()
 
             Button(action: {
-                if let url = URL(string: "https://example.com") {
+                if let url = URL(string: "https://apps.apple.com/us/app/split-rewards/id6740720801") {
                     UIApplication.shared.open(url)
                 }
             }) {

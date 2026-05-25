@@ -2,6 +2,7 @@
 //  ComposeMessage.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/20/26.
 //
 
 import SwiftUI
@@ -17,9 +18,9 @@ struct ComposeMessage: View {
     @FocusState private var focusedField: Field?
 
     @State private var recipientQuery: String
-    @State private var selectedRecipient: SharedMessageRecipientRecord?
-    @State private var allRecipientRecords: [SharedMessageRecipientRecord] = []
-    @State private var recipientSuggestions: [SharedMessageRecipientRecord] = []
+    @State private var selectedRecipient: MessageRecipientRecord?
+    @State private var allRecipientRecords: [MessageRecipientRecord] = []
+    @State private var recipientSuggestions: [MessageRecipientRecord] = []
     @State private var messageText = ""
     @State private var isSending = false
     @State private var sendError: String?
@@ -50,7 +51,7 @@ struct ComposeMessage: View {
         _recipientQuery = State(initialValue: normalizedPrefilled == nil ? (trimmedPrefilled ?? "") : "")
         _selectedRecipient = State(
             initialValue: normalizedPrefilled.map {
-                SharedMessageRecipientRecord(
+                MessageRecipientRecord(
                     lightningAddress: $0,
                     displayName: $0,
                     profilePicURL: nil,
@@ -59,6 +60,7 @@ struct ComposeMessage: View {
                 )
             }
         )
+        _messageText = State(initialValue: "")
         self.onSent = onSent
     }
 
@@ -608,12 +610,8 @@ struct ComposeMessage: View {
 
     @MainActor
     private func loadRecipientRecords() async {
-        var mergedByAddress: [String: SharedMessageRecipientRecord] = [:]
+        var mergedByAddress: [String: MessageRecipientRecord] = [:]
         var contactNamesByAddress: [String: String] = [:]
-
-        for record in SharedMessageRecipientCache.load() {
-            upsertRecipientRecord(record, into: &mergedByAddress)
-        }
 
         do {
             let contacts = try await walletManager.listContacts()
@@ -625,7 +623,7 @@ struct ComposeMessage: View {
                 contactNamesByAddress[normalizedAddress] = trimmedName
 
                 upsertRecipientRecord(
-                    SharedMessageRecipientRecord(
+                    MessageRecipientRecord(
                         lightningAddress: normalizedAddress,
                         displayName: trimmedName.isEmpty ? normalizedAddress : trimmedName,
                         profilePicURL: mergedByAddress[normalizedAddress]?.profilePicURL,
@@ -648,7 +646,7 @@ struct ComposeMessage: View {
                 ?? conversation.title
 
             upsertRecipientRecord(
-                SharedMessageRecipientRecord(
+                MessageRecipientRecord(
                     lightningAddress: lightningAddress,
                     displayName: displayName,
                     profilePicURL: existing?.profilePicURL,
@@ -677,14 +675,14 @@ struct ComposeMessage: View {
     }
 
     private func upsertRecipientRecord(
-        _ record: SharedMessageRecipientRecord,
-        into records: inout [String: SharedMessageRecipientRecord]
+        _ record: MessageRecipientRecord,
+        into records: inout [String: MessageRecipientRecord]
     ) {
         let normalizedAddress = Self.normalizeLightningAddress(record.lightningAddress)
         guard !normalizedAddress.isEmpty else { return }
 
         let normalizedDisplayName = record.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidate = SharedMessageRecipientRecord(
+        let candidate = MessageRecipientRecord(
             lightningAddress: normalizedAddress,
             displayName: normalizedDisplayName.isEmpty ? normalizedAddress : normalizedDisplayName,
             profilePicURL: Self.normalizedProfileURL(record.profilePicURL),
@@ -712,7 +710,7 @@ struct ComposeMessage: View {
         }
 
         let matches = allRecipientRecords
-            .compactMap { record -> (record: SharedMessageRecipientRecord, score: Int)? in
+            .compactMap { record -> (record: MessageRecipientRecord, score: Int)? in
                 guard let score = recipientMatchScore(for: record, query: trimmedQuery) else {
                     return nil
                 }
@@ -739,7 +737,7 @@ struct ComposeMessage: View {
     }
 
     private func recipientMatchScore(
-        for record: SharedMessageRecipientRecord,
+        for record: MessageRecipientRecord,
         query: String
     ) -> Int? {
         let displayName = Self.normalizedSearchText(record.displayName)
@@ -792,7 +790,7 @@ struct ComposeMessage: View {
         refreshRecipientSuggestions()
     }
 
-    private func selectRecipient(_ recipient: SharedMessageRecipientRecord) {
+    private func selectRecipient(_ recipient: MessageRecipientRecord) {
         selectedRecipient = recipient
         recipientQuery = ""
         sendError = nil
@@ -803,7 +801,7 @@ struct ComposeMessage: View {
         guard let typedRecipientCandidate else { return }
 
         selectRecipient(
-            SharedMessageRecipientRecord(
+            MessageRecipientRecord(
                 lightningAddress: typedRecipientCandidate,
                 displayName: typedRecipientCandidate,
                 profilePicURL: nil,
@@ -837,7 +835,7 @@ struct ComposeMessage: View {
 
         if let resolvedRecipientAddress {
             selectRecipient(
-                SharedMessageRecipientRecord(
+                MessageRecipientRecord(
                     lightningAddress: resolvedRecipientAddress,
                     displayName: resolvedRecipientAddress,
                     profilePicURL: nil,
@@ -848,7 +846,7 @@ struct ComposeMessage: View {
         }
     }
 
-    private func exactRecipientMatch(for rawQuery: String) -> SharedMessageRecipientRecord? {
+    private func exactRecipientMatch(for rawQuery: String) -> MessageRecipientRecord? {
         let normalizedQuery = Self.normalizedSearchText(rawQuery)
         if let normalizedAddress = Self.normalizeRecipientInput(rawQuery),
            let exactAddressMatch = allRecipientRecords.first(where: { $0.lightningAddress == normalizedAddress }) {
@@ -865,6 +863,13 @@ struct ComposeMessage: View {
         recipientQuery = ""
         selectedRecipient = nil
         refreshRecipientSuggestions()
+    }
+
+    private func imageDimensions(from data: Data) -> (width: Int, height: Int)? {
+        guard let image = UIImage(data: data) else { return nil }
+        let width = image.cgImage?.width ?? Int(image.size.width)
+        let height = image.cgImage?.height ?? Int(image.size.height)
+        return (width, height)
     }
 
     private func updateFocus() {
@@ -945,9 +950,9 @@ private extension ComposeMessage {
     }
 
     static func mergeRecipientRecords(
-        existing: SharedMessageRecipientRecord,
-        incoming: SharedMessageRecipientRecord
-    ) -> SharedMessageRecipientRecord {
+        existing: MessageRecipientRecord,
+        incoming: MessageRecipientRecord
+    ) -> MessageRecipientRecord {
         let preferredDisplayName: String
         switch (existing.source, incoming.source) {
         case (.contact, _):
@@ -974,10 +979,10 @@ private extension ComposeMessage {
             preferredDate = nil
         }
 
-        let preferredSource: SharedMessageRecipientRecord.Source =
+        let preferredSource: MessageRecipientRecord.Source =
             existing.source == .contact || incoming.source == .contact ? .contact : .conversation
 
-        return SharedMessageRecipientRecord(
+        return MessageRecipientRecord(
             lightningAddress: existing.lightningAddress,
             displayName: preferredDisplayName,
             profilePicURL: preferredProfilePicURL,
@@ -988,7 +993,7 @@ private extension ComposeMessage {
 }
 
 private struct RecipientSelectionChip: View {
-    let recipient: SharedMessageRecipientRecord
+    let recipient: MessageRecipientRecord
     let onClear: () -> Void
 
     var body: some View {

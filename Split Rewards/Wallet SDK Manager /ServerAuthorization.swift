@@ -2,6 +2,7 @@
 //  ServerAuthorization.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 12/17/25.
 //
 
 import Foundation

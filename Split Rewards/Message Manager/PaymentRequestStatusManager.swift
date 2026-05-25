@@ -2,6 +2,7 @@
 //  PaymentRequestStatusManager.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/23/26.
 //
 
 import Foundation
@@ -38,9 +39,24 @@ final class PaymentRequestStatusManager {
             invoice = nil
         }
 
-        guard let normalizedInvoice = invoice?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-              !normalizedInvoice.isEmpty else {
+        guard let invoice else {
+            return
+        }
+
+        await handleSettledInvoice(
+            invoice,
+            authManager: authManager,
+            walletManager: walletManager
+        )
+    }
+
+    func handleSettledInvoice(
+        _ invoice: String,
+        authManager: AuthManager,
+        walletManager: WalletManager
+    ) async {
+        let normalizedInvoice = invoice.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedInvoice.isEmpty else {
             return
         }
 
@@ -69,4 +85,8 @@ final class PaymentRequestStatusManager {
             print("Failed to sync paid payment request status: \(error.localizedDescription)")
         }
     }
+}
+
+extension Notification.Name {
+    static let paymentRequestInvoiceSettled = Notification.Name("paymentRequestInvoiceSettled")
 }

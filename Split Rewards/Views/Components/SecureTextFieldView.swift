@@ -1,6 +1,7 @@
 //
 //  SecureTextFieldView.swift
 //  Split Rewards
+//  Created by TeeVee on 1/16/25.
 //
 import SwiftUI
 

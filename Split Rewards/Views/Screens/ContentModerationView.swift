@@ -21,19 +21,9 @@ struct ContentModerationView: View {
                         iconColor: accentPink,
                         lines: [
                             "To block someone, open that person's detail view and tap the block icon.",
-                            "Once blocked, you will not receive messages from that user and their Proof of Spend posts will no longer appear in your feed.",
+                            "Once blocked, you will not receive messages from that user.",
+                            "Blocking helps you control who can contact you in Split.",
                             "Blocking another user is at the complete discretion of each user."
-                        ]
-                    )
-
-                    infoCard(
-                        title: "Reporting Posts",
-                        icon: "flag.fill",
-                        iconColor: accentBlue,
-                        lines: [
-                            "To report a Proof of Spend post, tap the flag button on the lower-left side of the post and confirm the report.",
-                            "Reporting a post should be reserved for highly offensive or illegal content.",
-                            "If you simply do not want to interact with someone, blocking that user is usually the better tool."
                         ]
                     )
                 }
@@ -61,11 +51,11 @@ struct ContentModerationView: View {
                 )
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("Blocking and Reporting")
+                Text("Blocking Users")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.white)
 
-                Text("Use blocking for your own comfort and safety. Use reporting when content crosses a serious line and needs review.")
+                Text("Use blocking for your own comfort and safety when you do not want another user to contact you.")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.92))
                     .fixedSize(horizontal: false, vertical: true)

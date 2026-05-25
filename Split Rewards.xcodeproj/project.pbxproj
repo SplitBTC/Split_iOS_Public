@@ -12,9 +12,7 @@
 		FBC95F172D337DF30029F7AF /* CoreNFC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FBC95F152D337DEB0029F7AF /* CoreNFC.framework */; };
 		FBCCE6F92EDF682E0014D403 /* Bip39 in Frameworks */ = {isa = PBXBuildFile; productRef = FBCCE6F82EDF682E0014D403 /* Bip39 */; };
 		FBE3F2622F29393B00A5040C /* BreezSdkSpark in Frameworks */ = {isa = PBXBuildFile; productRef = FBE3F2612F29393B00A5040C /* BreezSdkSpark */; };
-		FC4A1C9A2B00010300000003 /* Split Share Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = FC4A1C9A2B00010100000001 /* Split Share Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		FC4A1C9A2B00011000000010 /* BreezSdkSpark in Frameworks */ = {isa = PBXBuildFile; productRef = FBE3F2612F29393B00A5040C /* BreezSdkSpark */; };
-		FC4A1C9A2B00011100000011 /* secp256k1 in Frameworks */ = {isa = PBXBuildFile; productRef = FB90ECE42F6F28F10013E3C8 /* secp256k1 */; };
+		FC0A7D112F9B000100000001 /* SwiftTor in Frameworks */ = {isa = PBXBuildFile; productRef = FC0A7D102F9B000100000001 /* SwiftTor */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,28 +30,7 @@
 			remoteGlobalIDString = FBE8F2162D337A0E00EAA107;
 			remoteInfo = "Split Rewards";
 		};
-		FC4A1C9A2B00010D0000000D /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = FBE8F20F2D337A0E00EAA107 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = FC4A1C9A2B00010500000005;
-			remoteInfo = "Split Share Extension";
-		};
 /* End PBXContainerItemProxy section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		FC4A1C9A2B00010400000004 /* Embed App Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				FC4A1C9A2B00010300000003 /* Split Share Extension.appex in Embed App Extensions */,
-			);
-			name = "Embed App Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		FBC95F152D337DEB0029F7AF /* CoreNFC.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreNFC.framework; path = System/Library/Frameworks/CoreNFC.framework; sourceTree = SDKROOT; };
@@ -65,8 +42,6 @@
 		FC4A1C9A2B00000300000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		FC4A1C9A2B00000400000004 /* LocalDebug.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = LocalDebug.xcconfig.example; sourceTree = "<group>"; };
 		FC4A1C9A2B00000500000005 /* LocalRelease.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = LocalRelease.xcconfig.example; sourceTree = "<group>"; };
-		FC4A1C9A2B00010100000001 /* Split Share Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Split Share Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		FC4A1C9A2B00010E0000000E /* Split Share Extension-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Split Share Extension-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,11 +60,6 @@
 			path = "Split RewardsUITests";
 			sourceTree = "<group>";
 		};
-		FC4A1C9A2B00010200000002 /* Split Share Extension */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Split Share Extension";
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +68,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FBE3F2622F29393B00A5040C /* BreezSdkSpark in Frameworks */,
+				FC0A7D112F9B000100000001 /* SwiftTor in Frameworks */,
 				FB90ECE52F6F28F10013E3C8 /* secp256k1 in Frameworks */,
 				FBCCE6F92EDF682E0014D403 /* Bip39 in Frameworks */,
 				FBC95F132D337DD40029F7AF /* JWTDecode in Frameworks */,
@@ -119,15 +90,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FC4A1C9A2B00010600000006 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				FC4A1C9A2B00011000000010 /* BreezSdkSpark in Frameworks */,
-				FC4A1C9A2B00011100000011 /* secp256k1 in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -143,9 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				FC4A1C9A2B00000600000006 /* Config */,
-				FC4A1C9A2B00010E0000000E /* Split Share Extension-Info.plist */,
 				FBE8F2192D337A0E00EAA107 /* Split Rewards */,
-				FC4A1C9A2B00010200000002 /* Split Share Extension */,
 				FBE8F22A2D337A1300EAA107 /* Split RewardsTests */,
 				FBE8F2342D337A1300EAA107 /* Split RewardsUITests */,
 				FBC95F142D337DEB0029F7AF /* Frameworks */,
@@ -157,7 +117,6 @@
 			isa = PBXGroup;
 			children = (
 				FBE8F2172D337A0E00EAA107 /* Split Rewards.app */,
-				FC4A1C9A2B00010100000001 /* Split Share Extension.appex */,
 				FBE8F2272D337A1300EAA107 /* Split RewardsTests.xctest */,
 				FBE8F2312D337A1300EAA107 /* Split RewardsUITests.xctest */,
 			);
@@ -186,12 +145,10 @@
 				FBE8F2132D337A0E00EAA107 /* Sources */,
 				FBE8F2142D337A0E00EAA107 /* Frameworks */,
 				FBE8F2152D337A0E00EAA107 /* Resources */,
-				FC4A1C9A2B00010400000004 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				FC4A1C9A2B00010C0000000C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				FBE8F2192D337A0E00EAA107 /* Split Rewards */,
@@ -202,6 +159,7 @@
 				FBCCE6F82EDF682E0014D403 /* Bip39 */,
 				FBE3F2612F29393B00A5040C /* BreezSdkSpark */,
 				FB90ECE42F6F28F10013E3C8 /* secp256k1 */,
+				FC0A7D102F9B000100000001 /* SwiftTor */,
 			);
 			productName = "Split Rewards";
 			productReference = FBE8F2172D337A0E00EAA107 /* Split Rewards.app */;
@@ -253,30 +211,6 @@
 			productReference = FBE8F2312D337A1300EAA107 /* Split RewardsUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
-		FC4A1C9A2B00010500000005 /* Split Share Extension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = FC4A1C9A2B00010900000009 /* Build configuration list for PBXNativeTarget "Split Share Extension" */;
-			buildPhases = (
-				FC4A1C9A2B00010800000008 /* Sources */,
-				FC4A1C9A2B00010600000006 /* Frameworks */,
-				FC4A1C9A2B00010700000007 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				FC4A1C9A2B00010200000002 /* Split Share Extension */,
-			);
-			name = "Split Share Extension";
-			packageProductDependencies = (
-				FBE3F2612F29393B00A5040C /* BreezSdkSpark */,
-				FB90ECE42F6F28F10013E3C8 /* secp256k1 */,
-			);
-			productName = "Split Share Extension";
-			productReference = FC4A1C9A2B00010100000001 /* Split Share Extension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -298,9 +232,6 @@
 						CreatedOnToolsVersion = 16.2;
 						TestTargetID = FBE8F2162D337A0E00EAA107;
 					};
-					FC4A1C9A2B00010500000005 = {
-						CreatedOnToolsVersion = 16.2;
-					};
 				};
 			};
 			buildConfigurationList = FBE8F2122D337A0E00EAA107 /* Build configuration list for PBXProject "Split Rewards" */;
@@ -317,6 +248,7 @@
 				FBCCE6F72EDF682E0014D403 /* XCRemoteSwiftPackageReference "Bip39.swift" */,
 				FBE3F2602F29393B00A5040C /* XCRemoteSwiftPackageReference "breez-sdk-spark-swift" */,
 				FB90ECE32F6F28F10013E3C8 /* XCRemoteSwiftPackageReference "secp256k1" */,
+				FC0A7D0F2F9B000100000001 /* XCRemoteSwiftPackageReference "SwiftTor" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FBE8F2182D337A0E00EAA107 /* Products */;
@@ -324,7 +256,6 @@
 			projectRoot = "";
 			targets = (
 				FBE8F2162D337A0E00EAA107 /* Split Rewards */,
-				FC4A1C9A2B00010500000005 /* Split Share Extension */,
 				FBE8F2262D337A1300EAA107 /* Split RewardsTests */,
 				FBE8F2302D337A1300EAA107 /* Split RewardsUITests */,
 			);
@@ -347,13 +278,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		FBE8F22F2D337A1300EAA107 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		FC4A1C9A2B00010700000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -384,13 +308,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FC4A1C9A2B00010800000008 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -403,11 +320,6 @@
 			isa = PBXTargetDependency;
 			target = FBE8F2162D337A0E00EAA107 /* Split Rewards */;
 			targetProxy = FBE8F2322D337A1300EAA107 /* PBXContainerItemProxy */;
-		};
-		FC4A1C9A2B00010C0000000C /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = FC4A1C9A2B00010500000005 /* Split Share Extension */;
-			targetProxy = FC4A1C9A2B00010D0000000D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -547,7 +459,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Split Rewards/Preview Content\"";
-				ENABLE_PREVIEWS = YES;
+								ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Split-Rewards-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
@@ -563,13 +475,10 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.6.1;
+				MARKETING_VERSION = 4.4.0;
 				NEW_SETTING = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.SplitRewards";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SPLIT_KEYCHAIN_SERVICE = "com.example.SplitRewards";
-				SPLIT_SHARED_APP_GROUP_IDENTIFIER = "group.com.example.splitrewards.share";
-				SPLIT_SHARED_KEYCHAIN_GROUP_SUFFIX = "com.example.splitrewards.shared";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -592,7 +501,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Split Rewards/Preview Content\"";
-				ENABLE_PREVIEWS = YES;
+								ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Split-Rewards-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
@@ -608,13 +517,10 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.6.1;
+				MARKETING_VERSION = 4.4.0;
 				NEW_SETTING = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.SplitRewards";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SPLIT_KEYCHAIN_SERVICE = "com.example.SplitRewards";
-				SPLIT_SHARED_APP_GROUP_IDENTIFIER = "group.com.example.splitrewards.share";
-				SPLIT_SHARED_KEYCHAIN_GROUP_SUFFIX = "com.example.splitrewards.shared";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -631,7 +537,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
+								GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.SplitRewardsTests";
@@ -649,7 +555,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
+								GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.SplitRewardsTests";
@@ -666,7 +572,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
+								GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.SplitRewardsUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -682,7 +588,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
+								GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.example.SplitRewardsUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -690,72 +596,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = "Split Rewards";
-			};
-			name = Release;
-		};
-		FC4A1C9A2B00010A0000000A /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = FC4A1C9A2B00000200000002 /* Debug.xcconfig */;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_ENTITLEMENTS = "Split Share Extension/Split Share Extension.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "Split Share Extension-Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.SplitRewards.ShareExtension";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SPLIT_KEYCHAIN_SERVICE = "com.example.SplitRewards";
-				SPLIT_SHARED_APP_GROUP_IDENTIFIER = "group.com.example.splitrewards.share";
-				SPLIT_SHARED_KEYCHAIN_GROUP_SUFFIX = "com.example.splitrewards.shared";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
-		FC4A1C9A2B00010B0000000B /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = FC4A1C9A2B00000300000003 /* Release.xcconfig */;
-			buildSettings = {
-				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_ENTITLEMENTS = "Split Share Extension/Split Share Extension.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "Split Share Extension-Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.SplitRewards.ShareExtension";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SPLIT_KEYCHAIN_SERVICE = "com.example.SplitRewards";
-				SPLIT_SHARED_APP_GROUP_IDENTIFIER = "group.com.example.splitrewards.share";
-				SPLIT_SHARED_KEYCHAIN_GROUP_SUFFIX = "com.example.splitrewards.shared";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -798,15 +638,6 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		FC4A1C9A2B00010900000009 /* Build configuration list for PBXNativeTarget "Split Share Extension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				FC4A1C9A2B00010A0000000A /* Debug */,
-				FC4A1C9A2B00010B0000000B /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -839,7 +670,15 @@
 			repositoryURL = "https://github.com/breez/breez-sdk-spark-swift";
 			requirement = {
 				kind = exactVersion;
-				version = 0.12.2;
+				version = 0.13.1;
+			};
+		};
+		FC0A7D0F2F9B000100000001 /* XCRemoteSwiftPackageReference "SwiftTor" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FlorianHubl/SwiftTor";
+			requirement = {
+				branch = main;
+				kind = branch;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -864,6 +703,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = FBE3F2602F29393B00A5040C /* XCRemoteSwiftPackageReference "breez-sdk-spark-swift" */;
 			productName = BreezSdkSpark;
+		};
+		FC0A7D102F9B000100000001 /* SwiftTor */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FC0A7D0F2F9B000100000001 /* XCRemoteSwiftPackageReference "SwiftTor" */;
+			productName = SwiftTor;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

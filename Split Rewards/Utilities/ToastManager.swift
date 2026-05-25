@@ -4,7 +4,7 @@
 //  created 12/06/25
 //
 //  Global toast state for the app.
-//  - Supports paymentPending / paymentSuccess / paymentFailure
+//  - Supports payment success / payment failure / generic info / error
 //  - Only one toast visible at a time
 //  - Each toast auto-dismisses after a short duration
 //
@@ -47,20 +47,32 @@ struct AppToast: Identifiable, Equatable {
         self.subtitle = subtitle
         self.direction = direction
     }
+
+    var blocksInteraction: Bool {
+        kind != .paymentPending
+    }
+
+    var isTapToDismissEnabled: Bool {
+        kind != .paymentPending
+    }
 }
 
 /// Central manager that controls which toast, if any, is visible.
 @MainActor
 final class ToastManager: ObservableObject {
+    private let transactionBadgeLeadDuration: TimeInterval = 0.24
 
     /// The currently visible toast, if any.
     @Published private(set) var activeToast: AppToast?
+    @Published private(set) var isTransactionBadgeHeld = false
 
     /// Task responsible for auto-dismissing the current toast.
     private var dismissTask: Task<Void, Never>?
+    private var transactionBadgeLeadTask: Task<Void, Never>?
 
     deinit {
         dismissTask?.cancel()
+        transactionBadgeLeadTask?.cancel()
     }
 
     // MARK: - Core show/hide
@@ -77,7 +89,7 @@ final class ToastManager: ObservableObject {
         title: String,
         subtitle: String? = nil,
         direction: PaymentDirection? = nil,
-        duration: TimeInterval = 3.0
+        duration: TimeInterval? = 3.0
     ) {
         // Cancel any existing auto-dismiss task when a new toast is shown.
         dismissTask?.cancel()
@@ -91,10 +103,20 @@ final class ToastManager: ObservableObject {
         )
         activeToast = toast
 
+        if kind == .paymentSuccess || kind == .paymentFailure {
+            holdTransactionBadgeBriefly()
+        }
+
         // Schedule auto-dismiss after the given duration.
+        guard let duration else { return }
+
         dismissTask = Task { [weak self] in
             // Sleep off the main actor.
-            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            do {
+                try await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            } catch {
+                return
+            }
 
             // If the task wasn't cancelled, clear the toast on the main actor.
             await MainActor.run {
@@ -115,37 +137,27 @@ final class ToastManager: ObservableObject {
         activeToast = nil
     }
 
-    // MARK: - Convenience helpers (payment)
+    private func holdTransactionBadgeBriefly() {
+        transactionBadgeLeadTask?.cancel()
+        isTransactionBadgeHeld = true
+        let delayNanos = UInt64(transactionBadgeLeadDuration * 1_000_000_000)
 
-    /// Show a pending payment toast.
-    ///
-    /// - Parameters:
-    ///   - direction: Payment direction. Defaults to `.sent` for backwards compatibility.
-    ///   - subtitle: Optional subtitle (e.g. "Sending 50,000 sats").
-    ///   - duration: Auto-dismiss delay.
-    func showPaymentPending(
-        direction: PaymentDirection = .sent,
-        subtitle: String? = nil,
-        duration: TimeInterval = 3.0
-    ) {
-        let title: String
-        switch direction {
-        case .sent:
-            title = "Your payment is processing"
-        case .received:
-            // You may not use this for received payments in your current design,
-            // but it's here for completeness.
-            title = "Incoming payment pending"
+        transactionBadgeLeadTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: delayNanos)
+            } catch {
+                return
+            }
+
+            await MainActor.run {
+                guard let self else { return }
+                self.isTransactionBadgeHeld = false
+                self.transactionBadgeLeadTask = nil
+            }
         }
-
-        show(
-            kind: .paymentPending,
-            title: title,
-            subtitle: subtitle,
-            direction: direction,
-            duration: duration
-        )
     }
+
+    // MARK: - Convenience helpers (payment)
 
     /// Show a successful payment toast.
     ///
@@ -161,7 +173,7 @@ final class ToastManager: ObservableObject {
         let title: String
         switch direction {
         case .sent:
-            title = "Payment completed"
+            title = "Payment sent"
         case .received:
             title = "Payment received"
         }
@@ -172,6 +184,15 @@ final class ToastManager: ObservableObject {
             subtitle: subtitle,
             direction: direction,
             duration: duration
+        )
+    }
+
+    func showPaymentPending(direction: PaymentDirection = .sent) {
+        show(
+            kind: .paymentPending,
+            title: "",
+            direction: direction,
+            duration: nil
         )
     }
 
@@ -189,9 +210,9 @@ final class ToastManager: ObservableObject {
         let title: String
         switch direction {
         case .sent:
-            title = "Payment failed"
+            title = "Send failed"
         case .received:
-            title = "Incoming payment failed"
+            title = "Receive failed"
         }
 
         show(
@@ -221,6 +242,3 @@ final class ToastManager: ObservableObject {
         show(kind: .error, title: title, subtitle: subtitle, direction: nil, duration: duration)
     }
 }
-
-
-

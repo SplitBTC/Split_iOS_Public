@@ -2,6 +2,7 @@
 //  AppState.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 1/21/25.
 //
 
 import Foundation
@@ -23,8 +24,5 @@ final class AppState: ObservableObject {
 
     init() {}
 }
-
-
-
 
 

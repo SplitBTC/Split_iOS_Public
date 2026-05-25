@@ -2,6 +2,7 @@
 //  RequestPaymentMessageView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/22/26.
 //
 
 import SwiftUI
@@ -9,6 +10,11 @@ import SwiftUI
 struct RequestPaymentMessageView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var walletManager: WalletManager
+    @EnvironmentObject private var lndWalletManager: LNDWalletManager
+    @EnvironmentObject private var nwcWalletManager: NWCWalletManager
+    @EnvironmentObject private var coreLightningWalletManager: CoreLightningWalletManager
+    @EnvironmentObject private var eclairWalletManager: EclairWalletManager
+    @EnvironmentObject private var activeSpendWalletStore: ActiveSpendWalletStore
     @EnvironmentObject var authManager: AuthManager
     @FocusState private var amountFieldFocused: Bool
 
@@ -253,18 +259,10 @@ struct RequestPaymentMessageView: View {
             let requesterAddress = try await walletManager.fetchLightningAddress()?.lightningAddress
             let description = requesterAddress ?? "Split payment request"
 
-            guard let invoice = await walletManager.generateBolt11Invoice(
+            let invoice = try await createInvoice(
                 description: description,
                 amountSats: amountSats
-            ) else {
-                throw NSError(
-                    domain: "RequestPaymentMessageView",
-                    code: 1,
-                    userInfo: [
-                        NSLocalizedDescriptionKey: walletManager.lastErrorMessage ?? "Failed to create invoice."
-                    ]
-                )
-            }
+            )
 
             _ = try await MessagingSendCoordinator.sendPaymentRequest(
                 lightningAddress: lightningAddress,
@@ -285,6 +283,84 @@ struct RequestPaymentMessageView: View {
         }
 
         isSending = false
+    }
+
+    private func createInvoice(
+        description: String,
+        amountSats: UInt64
+    ) async throws -> String {
+        if activeSpendWalletStore.isLndActive {
+            if !lndWalletManager.isConnected {
+                try await lndWalletManager.restoreActiveNode()
+            }
+
+            let response = try await lndWalletManager.createInvoice(
+                amountSats: Int64(amountSats),
+                memo: description
+            )
+            return response.paymentRequest
+        }
+
+        if activeSpendWalletStore.isNWCActive {
+            if !nwcWalletManager.isConnected {
+                try await nwcWalletManager.restoreActiveWallet()
+            }
+
+            guard nwcWalletManager.connectedWallet?.capabilities?.supportsInvoices != false else {
+                throw NWCWalletError.unsupportedMethod("make_invoice")
+            }
+
+            let response = try await nwcWalletManager.createInvoice(
+                amountSats: Int64(amountSats),
+                memo: description
+            )
+
+            guard let invoice = response.invoice?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !invoice.isEmpty else {
+                throw NWCWalletError.invalidRelayResponse
+            }
+
+            return invoice
+        }
+
+        if activeSpendWalletStore.isCoreLightningActive {
+            if !coreLightningWalletManager.isConnected {
+                try await coreLightningWalletManager.restoreActiveNode()
+            }
+
+            let response = try await coreLightningWalletManager.createInvoice(
+                amountSats: Int64(amountSats),
+                memo: description
+            )
+            return response.bolt11
+        }
+
+        if activeSpendWalletStore.isEclairActive {
+            if !eclairWalletManager.isConnected {
+                try await eclairWalletManager.restoreActiveNode()
+            }
+
+            let response = try await eclairWalletManager.createInvoice(
+                amountSats: Int64(amountSats),
+                memo: description
+            )
+            return response.serialized
+        }
+
+        guard let invoice = await walletManager.generateBolt11Invoice(
+            description: description,
+            amountSats: amountSats
+        ) else {
+            throw NSError(
+                domain: "RequestPaymentMessageView",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: walletManager.lastErrorMessage ?? "Failed to create invoice."
+                ]
+            )
+        }
+
+        return invoice
     }
 
     private func syncDisplayForSelectedUnit(from oldUnit: AmountUnit, to newUnit: AmountUnit) {

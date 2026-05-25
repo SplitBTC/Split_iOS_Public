@@ -1,9 +1,10 @@
 //  CustomerIndexView.swift
 //  Split
 //
+//  Created by TeeVee on 1/5/25.
 //
 import SwiftUI
-import SafariServices
+import UIKit
 
 struct CustomerIndexView: View {
     @EnvironmentObject var walletManager: WalletManager
@@ -21,28 +22,15 @@ struct CustomerIndexView: View {
 
     @State private var isShowingRestoreSheet = false
     @State private var isShowingSeedBackup = false
+    @State private var isShowingCreateWalletConfirmation = false
 
     @State private var btcPriceUSD: Double? = nil
     @State private var isRefreshingBTCPrice: Bool = false
 
-    @State private var onRampCoverItem: OnRampCoverItem? = nil
     @State private var isStartingOnRamp: Bool = false
-    @State private var isShowingOnRampProviderPicker: Bool = false
-    @State private var isShowingMoonPayAmountSheet: Bool = false
-
-    @State private var isShowingBTCChart: Bool = false
+    @State private var isShowingCashAppAmountSheet: Bool = false
 
     @State private var alertMessage: String? = nil
-
-    private struct OnRampCoverItem: Identifiable {
-        let id = UUID()
-        let url: URL
-    }
-
-    private enum OnRampProvider {
-        case stripe
-        case moonPay
-    }
 
     var body: some View {
         ZStack {
@@ -51,8 +39,12 @@ struct CustomerIndexView: View {
 
             VStack(alignment: .leading, spacing: 24) {
                 walletStateSection
-                Spacer()
+
+                if !isWalletReady {
+                    Spacer()
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(.horizontal, 18)
             .padding(.top, 8)
             .padding(.bottom, 16)
@@ -106,54 +98,17 @@ struct CustomerIndexView: View {
                 .background(appBlack.ignoresSafeArea())
             }
         }
-        .fullScreenCover(item: $onRampCoverItem, onDismiss: {
-            onRampCoverItem = nil
-            refreshBTCPrice()
-        }) { item in
-            InAppSafariView(url: item.url)
-                .ignoresSafeArea()
-        }
-        .sheet(isPresented: $isShowingOnRampProviderPicker) {
-            onRampProviderPickerSheet
-        }
-        .sheet(isPresented: $isShowingMoonPayAmountSheet) {
-            MoonPayAmountSheet(
+        .fullScreenCover(isPresented: $isShowingCashAppAmountSheet) {
+            CashAppAmountSheet(
                 btcUsdRate: btcPriceUSD ?? walletManager.btcUsdRate,
                 isStarting: isStartingOnRamp,
-                onStart: { lockedAmountSats, estimatedSpendAmountCents in
-                    startMoonPayOnRamp(
-                        lockedAmountSats: lockedAmountSats,
-                        estimatedSpendAmountCents: estimatedSpendAmountCents
-                    )
+                onStart: { amountSats in
+                    startCashAppOnRamp(amountSats: amountSats)
                 },
                 onCancel: {
-                    isShowingMoonPayAmountSheet = false
+                    isShowingCashAppAmountSheet = false
                 }
             )
-            .presentationDetents([.height(560)])
-            .presentationDragIndicator(.visible)
-        }
-        .fullScreenCover(isPresented: $isShowingBTCChart) {
-            if #available(iOS 16.0, *) {
-                BitcoinPriceChartFullscreenView(initialRange: .day) {
-                    isShowingBTCChart = false
-                }
-            } else {
-                ZStack {
-                    appBlack.ignoresSafeArea()
-
-                    VStack(spacing: 12) {
-                        Text("Chart requires iOS 16+")
-                            .foregroundColor(.white)
-
-                        Button("Close") {
-                            isShowingBTCChart = false
-                        }
-                        .foregroundColor(.white)
-                    }
-                    .padding()
-                }
-            }
         }
         .alert(
             "Notice",
@@ -168,118 +123,24 @@ struct CustomerIndexView: View {
         } message: {
             Text(alertMessage ?? "")
         }
-    }
-
-    private var onRampProviderPickerSheet: some View {
-        ZStack {
-            appBlack
-                .ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 18) {
-                Capsule()
-                    .fill(Color.white.opacity(0.20))
-                    .frame(width: 44, height: 5)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
-
-                Text("Choose Bitcoin Provider")
-                    .font(.title3.weight(.semibold))
-                    .foregroundColor(.white)
-
-                providerOptionButton(
-                    provider: .stripe,
-                    title: "Stripe",
-                    subtitle: "Buy Bitcoin with Stripe.",
-                    logoName: "StripeOnRampLogo",
-                    logoHeight: 22,
-                    accent: blue
-                )
-
-                providerOptionButton(
-                    provider: .moonPay,
-                    title: "MoonPay",
-                    subtitle: "Buy Bitcoin with MoonPay.",
-                    logoName: "MoonPayOnRampLogo",
-                    logoHeight: 34,
-                    accent: pink
-                )
-
-                Button("Cancel", role: .cancel) {
-                    isShowingOnRampProviderPicker = false
+        .alert(
+            "Replace Saved Wallet?",
+            isPresented: $isShowingCreateWalletConfirmation
+        ) {
+            Button("Cancel", role: .cancel) { }
+            Button("Create New Wallet", role: .destructive) {
+                Task {
+                    await walletManager.createWallet()
+                    await MainActor.run {
+                        if !walletManager.pendingSeedWords.isEmpty {
+                            isShowingSeedBackup = true
+                        }
+                    }
                 }
-                .font(.headline)
-                .foregroundColor(.white.opacity(0.80))
-                .frame(maxWidth: .infinity)
-                .padding(.top, 2)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 24)
+        } message: {
+            Text("Creating a new wallet will wipe the seedphrase currently saved on this device making recovery without your own backup impossible. Only continue if you want a brand-new wallet on this device.")
         }
-        .presentationDetents([.height(430)])
-        .presentationDragIndicator(.hidden)
-    }
-
-    private func providerOptionButton(
-        provider: OnRampProvider,
-        title: String,
-        subtitle: String,
-        logoName: String,
-        logoHeight: CGFloat,
-        accent: Color
-    ) -> some View {
-        Button {
-            isShowingOnRampProviderPicker = false
-            switch provider {
-            case .stripe:
-                startStripeOnRamp()
-            case .moonPay:
-                isShowingMoonPayAmountSheet = true
-            }
-        } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.white)
-
-                    Image(logoName)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 108, maxHeight: logoHeight)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                }
-                .frame(width: 132, height: 72)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundColor(.white)
-
-                    Text(subtitle)
-                        .font(.footnote)
-                        .foregroundColor(.white.opacity(0.70))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.headline.weight(.semibold))
-                    .foregroundColor(.white.opacity(0.62))
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(cardSurface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(accent.opacity(0.45), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(isStartingOnRamp)
-        .opacity(isStartingOnRamp ? 0.65 : 1)
     }
 
     @ViewBuilder
@@ -406,25 +267,34 @@ struct CustomerIndexView: View {
                 return formatUSD(btcPriceUSD)
             }()
 
-            UnifiedWalletSurface(
-                blue: blue,
-                pink: pink,
-                fiatBalanceText: fiatText,
-                btcBalanceText: btcText,
-                isSyncing: walletManager.isSyncing,
-                authStatusText: authText,
-                authStatusIsError: isAuthError,
-                btcPriceText: priceText,
-                onRefreshBTCPrice: { refreshBTCPrice() },
-                onTapBTCPrice: { isShowingBTCChart = true },
-                onBuy: { isShowingOnRampProviderPicker = true }
-            )
+            ScrollView(showsIndicators: false) {
+                UnifiedWalletSurface(
+                    blue: blue,
+                    pink: pink,
+                    fiatBalanceText: fiatText,
+                    btcBalanceText: btcText,
+                    isSyncing: walletManager.isSyncing,
+                    authStatusText: authText,
+                    authStatusIsError: isAuthError,
+                    btcUsdRate: btcPriceUSD ?? walletManager.btcUsdRate,
+                    btcPriceText: priceText,
+                    onRefreshBTCPrice: { refreshBTCPrice() },
+                    onBuy: { isShowingCashAppAmountSheet = true }
+                )
+                .padding(.bottom, 10)
+            }
 
         case .error(let message):
             VStack(alignment: .leading, spacing: 12) {
-                Text("Wallet Error")
+                Text(walletManager.isStoredWalletRecoveryFlowActive ? "Wallet Couldn't Open" : "Wallet Error")
                     .font(.headline)
                     .foregroundColor(.white)
+
+                if walletManager.isStoredWalletRecoveryFlowActive {
+                    Text("We found a wallet seed on this device, but Split couldn’t reopen the wallet automatically. Try restoring the existing wallet first. If you create a new wallet instead, the saved recovery phrase on this device will be replaced.")
+                        .font(.footnote)
+                        .foregroundColor(.white.opacity(0.72))
+                }
 
                 Text(message)
                     .font(.footnote)
@@ -453,6 +323,46 @@ struct CustomerIndexView: View {
                                 .stroke(strongHairline, lineWidth: 1)
                         )
                 }
+
+                if walletManager.isStoredWalletRecoveryFlowActive {
+                    Button {
+                        isShowingRestoreSheet = true
+                    } label: {
+                        Text("Restore Wallet")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(
+                                LinearGradient(
+                                    colors: [berry, pink],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .foregroundColor(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(strongHairline, lineWidth: 1)
+                            )
+                    }
+
+                    Button {
+                        isShowingCreateWalletConfirmation = true
+                    } label: {
+                        Text("Create New Wallet")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.white.opacity(0.08))
+                            .foregroundColor(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(hairline, lineWidth: 1)
+                            )
+                    }
+                }
             }
             .padding()
             .background(cardSurface)
@@ -463,6 +373,14 @@ struct CustomerIndexView: View {
             )
             .shadow(color: indigo.opacity(0.30), radius: 16, x: 0, y: 10)
         }
+    }
+
+    private var isWalletReady: Bool {
+        if case .ready = walletManager.state {
+            return true
+        }
+
+        return false
     }
 
     private func refreshBTCPrice() {
@@ -487,72 +405,30 @@ struct CustomerIndexView: View {
         return formatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
     }
 
-    private func startStripeOnRamp() {
+    private func startCashAppOnRamp(amountSats: UInt64) {
         guard !isStartingOnRamp else { return }
         isStartingOnRamp = true
 
         Task {
             do {
-                let btcAddress = try await walletManager.getOnchainReceiveAddress()
+                let url = try await walletManager.createCashAppBuyURL(amountSats: amountSats)
 
-                postOnRamp(
-                    walletManager: walletManager,
-                    authManager: authManager,
-                    btcAddress: btcAddress,
-                    onSuccess: { url in
-                        if #available(iOS 15.0, *) {
-                            SFSafariViewController.prewarmConnections(to: [url])
+                await MainActor.run {
+                    UIApplication.shared.open(url, options: [:]) { accepted in
+                        if !accepted {
+                            alertMessage = "Unable to open Cash App for this purchase."
                         }
 
-                        onRampCoverItem = OnRampCoverItem(url: url)
-                        isStartingOnRamp = false
-                    },
-                    onError: { msg in
-                        alertMessage = msg
-                        isStartingOnRamp = false
-                    }
-                )
-            } catch {
-                alertMessage = "Failed to generate on-chain address: \(error.localizedDescription)"
-                isStartingOnRamp = false
-            }
-        }
-    }
-
-    private func startMoonPayOnRamp(lockedAmountSats: UInt64, estimatedSpendAmountCents: Int) {
-        guard !isStartingOnRamp else { return }
-        isStartingOnRamp = true
-
-        postMoonPayPrepareBuy(
-            walletManager: walletManager,
-            authManager: authManager,
-            lockedAmountSats: lockedAmountSats,
-            estimatedSpendAmountCents: estimatedSpendAmountCents,
-            onSuccess: { response in
-                Task {
-                    do {
-                        let url = try await walletManager.createMoonPayBuyURL(
-                            lockedAmountSat: response.lockedAmountSats,
-                            redirectUrl: response.redirectUrl
-                        )
-
-                        if #available(iOS 15.0, *) {
-                            SFSafariViewController.prewarmConnections(to: [url])
-                        }
-
-                        isShowingMoonPayAmountSheet = false
-                        onRampCoverItem = OnRampCoverItem(url: url)
-                        isStartingOnRamp = false
-                    } catch {
-                        alertMessage = "Failed to start MoonPay: \(error.localizedDescription)"
+                        isShowingCashAppAmountSheet = false
                         isStartingOnRamp = false
                     }
                 }
-            },
-            onError: { msg in
-                alertMessage = msg
-                isStartingOnRamp = false
+            } catch {
+                await MainActor.run {
+                    alertMessage = "Failed to start Cash App: \(error.localizedDescription)"
+                    isStartingOnRamp = false
+                }
             }
-        )
+        }
     }
 }

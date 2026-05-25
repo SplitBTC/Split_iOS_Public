@@ -2,12 +2,18 @@
 //  UserLifeCycle.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 12/8/25.
 //
 import Foundation
 import BreezSdkSpark
 
 @MainActor
 extension WalletManager {
+    private enum WalletBootstrapFailure: Error {
+        case preConnect(Error)
+        case connect(error: Error, hadExistingStorage: Bool)
+        case postConnect(Error)
+    }
 
     // MARK: - Public API (called from the app)
 
@@ -24,13 +30,20 @@ extension WalletManager {
         defer { isConfiguring = false }
 
         lastErrorMessage = nil
+        didAttemptSilentWalletRepairInCurrentStartupFlow = false
 
         if let seed = readLocalSeed() {
             print("ℹ️ [WalletManager \(instanceId)] configure(): found local seed, connecting with seed")
-            await connectWithSeed(seed, authManager: authManager)
+            await connectWithSeed(
+                seed,
+                authManager: authManager,
+                allowSilentRepair: true,
+                showRecoveryOptionsOnConnectFailure: true
+            )
         } else {
             print("ℹ️ [WalletManager \(instanceId)] configure(): no local seed → disconnecting, state = .noWallet")
             await disconnectCurrentWallet()
+            clearStoredWalletRecoveryFlow()
             state = .noWallet
         }
     }
@@ -55,87 +68,59 @@ extension WalletManager {
     func connectWithSeed(
         _ mnemonic: String,
         authManager: AuthManager,
-        persistSeedOnSuccess: Bool = false
+        persistSeedOnSuccess: Bool = false,
+        allowSilentRepair: Bool = false,
+        showRecoveryOptionsOnConnectFailure: Bool = false
     ) async {
         lastErrorMessage = nil
 
         do {
-            if let existing = sdk {
-                do {
-                    await detachEventListener()
-                    try await existing.disconnect()
-                } catch {
-                    print("⚠️ [WalletManager \(instanceId)] Breez disconnect failed: \(error)")
-                }
-            }
-
-            let seed = Seed.mnemonic(mnemonic: mnemonic, passphrase: nil)
-            let apiKey = try await getBreezApiKey()
-
-            var config = defaultConfig(network: .mainnet)
-            config.apiKey = apiKey
-            config.lnurlDomain = AppConfig.lightningAddressDomain
-            config.privateEnabledDefault = true
-
-            let storageDir = try makeStorageDir()
-
-            let newSdk = try await connect(
-                request: ConnectRequest(
-                    config: config,
-                    seed: seed,
-                    storageDir: storageDir
-                )
+            try await bootstrapWallet(
+                withMnemonic: mnemonic,
+                authManager: authManager,
+                persistSeedOnSuccess: persistSeedOnSuccess
             )
+            clearStoredWalletRecoveryFlow()
+        } catch let failure as WalletBootstrapFailure {
+            switch failure {
+            case .preConnect(let error), .postConnect(let error):
+                let msg = "Failed to connect wallet: \(error.localizedDescription)"
+                state = .error(msg)
+                lastErrorMessage = msg
+            case .connect(let error, let hadExistingStorage):
+                if showRecoveryOptionsOnConnectFailure {
+                    let shouldAttemptRepair =
+                        allowSilentRepair &&
+                        !didAttemptSilentWalletRepairInCurrentStartupFlow &&
+                        shouldAttemptSilentWalletRepair(
+                            for: error,
+                            hadExistingStorage: hadExistingStorage
+                        )
 
-            sdk = newSdk
+                    if shouldAttemptRepair {
+                        didAttemptSilentWalletRepairInCurrentStartupFlow = true
+                        let repairSucceeded = await repairLocalWallet(
+                            using: mnemonic,
+                            authManager: authManager,
+                            persistSeedOnSuccess: persistSeedOnSuccess
+                        )
 
-            if persistSeedOnSuccess {
-                saveLocalSeed(mnemonic)
-            }
+                        if repairSucceeded {
+                            clearStoredWalletRecoveryFlow()
+                            return
+                        }
+                    }
 
-            await attachEventListener(
-                to: newSdk,
-                authManager: authManager
-            )
-
-            try await loadRemoteState()
-            do {
-                _ = try await MessageKeyManager.shared.ensureRegistered(
-                    authManager: authManager,
-                    walletManager: self
-                )
-                await MessagingDeviceTokenManager.shared.syncDeviceTokenIfPossible(
-                    authManager: authManager,
-                    walletManager: self,
-                    force: true
-                )
-                await MessageSyncManager.shared.syncInboxIfPossible(
-                    authManager: authManager,
-                    walletManager: self,
-                    force: true
-                )
-                _ = await MessagingPushSyncCoordinator.shared.processPendingPushIfPossible()
-            } catch {
-                if MessageKeyManager.shared.shouldSilentlyDeferActivation(for: error) {
-                    print("ℹ️ [WalletManager \(instanceId)] Messaging activation deferred: \(error.localizedDescription)")
-                } else {
-                    print("⚠️ [WalletManager \(instanceId)] Messaging key ensure failed: \(error.localizedDescription)")
+                    activateStoredWalletRecoveryFlow()
                 }
-            }
 
-            await refreshBtcUsdRate()
-            updateFiatBalance()
+                let msg = "Failed to connect wallet: \(error.localizedDescription)"
+                state = .error(msg)
+                lastErrorMessage = msg
+            }
         } catch {
             let msg = "Failed to connect wallet: \(error.localizedDescription)"
-
-            if shouldResetStoredSeedAfterConnectionFailure(error) {
-                await disconnectCurrentWallet()
-                clearLocalSeed()
-                state = .noWallet
-            } else {
-                state = .error(msg)
-            }
-
+            state = .error(msg)
             lastErrorMessage = msg
         }
     }
@@ -181,6 +166,7 @@ extension WalletManager {
         clearBreezStorage()
 
         // 5) Reset UI state
+        clearStoredWalletRecoveryFlow()
         state = .noWallet
         lastErrorMessage = nil
     }
@@ -210,7 +196,153 @@ extension WalletManager {
     // MARK: - Seed storage helpers
 
     private func readLocalSeed() -> String? {
-        KeychainHelper.read(forKey: walletSeedKey)
+        let trimmedSeed = KeychainHelper.read(forKey: walletSeedKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let trimmedSeed, !trimmedSeed.isEmpty else {
+            return nil
+        }
+
+        return trimmedSeed
+    }
+
+    private func bootstrapWallet(
+        withMnemonic mnemonic: String,
+        authManager: AuthManager,
+        persistSeedOnSuccess: Bool
+    ) async throws {
+        if let existing = sdk {
+            do {
+                await detachEventListener()
+                try await existing.disconnect()
+            } catch {
+                print("⚠️ [WalletManager \(instanceId)] Breez disconnect failed: \(error)")
+            }
+        }
+
+        let seed = Seed.mnemonic(mnemonic: mnemonic, passphrase: nil)
+
+        let apiKey: String
+        do {
+            apiKey = try await getBreezApiKey()
+        } catch {
+            throw WalletBootstrapFailure.preConnect(error)
+        }
+
+        var config = defaultConfig(network: .mainnet)
+        config.apiKey = apiKey
+        config.lnurlDomain = AppConfig.lightningAddressDomain
+        config.privateEnabledDefault = true
+
+        let hadExistingStorage = hasExistingBreezStorageDirectory()
+
+        let storageDir: String
+        do {
+            storageDir = try makeStorageDir()
+        } catch {
+            throw WalletBootstrapFailure.preConnect(error)
+        }
+
+        let newSdk: BreezSdk
+        do {
+            newSdk = try await connect(
+                request: ConnectRequest(
+                    config: config,
+                    seed: seed,
+                    storageDir: storageDir
+                )
+            )
+        } catch {
+            throw WalletBootstrapFailure.connect(
+                error: error,
+                hadExistingStorage: hadExistingStorage
+            )
+        }
+
+        sdk = newSdk
+
+        if persistSeedOnSuccess {
+            saveLocalSeed(mnemonic)
+        }
+
+        await attachEventListener(
+            to: newSdk,
+            authManager: authManager
+        )
+
+        do {
+            try await loadRemoteState()
+        } catch {
+            throw WalletBootstrapFailure.postConnect(error)
+        }
+        do {
+            _ = try await MessageKeyManager.shared.ensureRegistered(
+                authManager: authManager,
+                walletManager: self
+            )
+            await MessagingDeviceTokenManager.shared.syncDeviceTokenIfPossible(
+                authManager: authManager,
+                walletManager: self,
+                force: true
+            )
+            await MessageSyncManager.shared.syncInboxIfPossible(
+                authManager: authManager,
+                walletManager: self,
+                force: true
+            )
+            _ = await MessagingPushSyncCoordinator.shared.processPendingPushIfPossible()
+        } catch {
+            if MessageKeyManager.shared.shouldSilentlyDeferActivation(for: error) {
+                print("ℹ️ [WalletManager \(instanceId)] Messaging activation deferred: \(error.localizedDescription)")
+            } else {
+                print("⚠️ [WalletManager \(instanceId)] Messaging key ensure failed: \(error.localizedDescription)")
+            }
+        }
+
+        await refreshBtcUsdRate()
+        updateFiatBalance()
+    }
+
+    private func shouldAttemptSilentWalletRepair(
+        for error: Error,
+        hadExistingStorage: Bool
+    ) -> Bool {
+        guard hadExistingStorage else {
+            return false
+        }
+
+        guard let sdkError = error as? SdkError else {
+            return false
+        }
+
+        if case .StorageError = sdkError {
+            return true
+        }
+
+        return false
+    }
+
+    private func repairLocalWallet(
+        using mnemonic: String,
+        authManager: AuthManager,
+        persistSeedOnSuccess: Bool
+    ) async -> Bool {
+        print("ℹ️ [WalletManager \(instanceId)] Attempting silent wallet repair")
+        await disconnectCurrentWallet()
+        clearBreezStorage()
+
+        do {
+            try await bootstrapWallet(
+                withMnemonic: mnemonic,
+                authManager: authManager,
+                persistSeedOnSuccess: persistSeedOnSuccess
+            )
+            print("ℹ️ [WalletManager \(instanceId)] Silent wallet repair succeeded")
+            return true
+        } catch {
+            print("⚠️ [WalletManager \(instanceId)] Silent wallet repair failed: \(error.localizedDescription)")
+            return false
+        }
     }
 
     func saveLocalSeed(_ seed: String) {
@@ -223,7 +355,7 @@ extension WalletManager {
 
     // MARK: - Storage dir & fiat balance
 
-    private func makeStorageDir() throws -> String {
+    private func breezStorageDirectoryURL() throws -> URL {
         let fm = FileManager.default
         let appSupport = try fm.url(
             for: .applicationSupportDirectory,
@@ -232,7 +364,21 @@ extension WalletManager {
             create: true
         )
 
-        let dir = appSupport.appendingPathComponent("breez-spark", isDirectory: true)
+        return appSupport.appendingPathComponent("breez-spark", isDirectory: true)
+    }
+
+    private func hasExistingBreezStorageDirectory() -> Bool {
+        do {
+            let dir = try breezStorageDirectoryURL()
+            return FileManager.default.fileExists(atPath: dir.path)
+        } catch {
+            return false
+        }
+    }
+
+    private func makeStorageDir() throws -> String {
+        let fm = FileManager.default
+        let dir = try breezStorageDirectoryURL()
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.path
     }
@@ -240,14 +386,7 @@ extension WalletManager {
     private func clearBreezStorage() {
         do {
             let fm = FileManager.default
-            let appSupport = try fm.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            )
-
-            let dir = appSupport.appendingPathComponent("breez-spark", isDirectory: true)
+            let dir = try breezStorageDirectoryURL()
 
             if fm.fileExists(atPath: dir.path) {
                 try fm.removeItem(at: dir)
@@ -271,19 +410,5 @@ extension WalletManager {
             let btc = Double(balanceSats) / 100_000_000.0
             fiatBalanceUSD = btc * rate
         }
-    }
-
-    private func shouldResetStoredSeedAfterConnectionFailure(_ error: Error) -> Bool {
-        let normalizedDescription = error.localizedDescription.lowercased()
-
-        guard normalizedDescription.contains("mnemonic") else {
-            return false
-        }
-
-        return normalizedDescription.contains("unknown word")
-            || normalizedDescription.contains("unknow word")
-            || normalizedDescription.contains("invalid mnemonic")
-            || normalizedDescription.contains("invalid word")
-            || normalizedDescription.contains("mnemonic contains")
     }
 }

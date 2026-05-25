@@ -2,6 +2,7 @@
 //  GetBTCMapPlaces.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/24/26.
 //
 
 import Foundation

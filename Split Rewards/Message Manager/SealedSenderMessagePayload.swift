@@ -2,6 +2,7 @@
 //  SealedSenderMessagePayload.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 4/2/26.
 //
 
 import Foundation
@@ -9,6 +10,10 @@ import Foundation
 struct SealedSenderMessagePayload: Codable {
     let body: String
     let sender: MessagingIdentityBindingPayload
-    let senderEnvelopeSignature: String
-    let senderEnvelopeSignatureVersion: Int
+    let messagingSigningPubkey: String
+    let messagingSigningPubkeySignature: String
+    let messagingSigningPubkeySignatureVersion: Int
+    let messagingSigningPubkeySignedAt: Int
+    let messageSignature: String
+    let messageSignatureVersion: Int
 }

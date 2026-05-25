@@ -2,19 +2,16 @@ import Foundation
 import BreezSdkSpark
 
 extension WalletManager {
-    func createMoonPayBuyURL(
-        lockedAmountSat: UInt64? = nil,
-        redirectUrl: String? = nil
+    func createCashAppBuyURL(
+        amountSats: UInt64? = nil
     ) async throws -> URL {
         guard let sdk else {
             throw WalletError.sdkNotInitialized
         }
 
+        let normalizedAmountSats = amountSats.flatMap { $0 > 0 ? $0 : nil }
         let response = try await sdk.buyBitcoin(
-            request: BuyBitcoinRequest(
-                lockedAmountSat: lockedAmountSat,
-                redirectUrl: redirectUrl
-            )
+            request: .cashApp(amountSats: normalizedAmountSats)
         )
 
         guard let url = URL(string: response.url) else {

@@ -2,6 +2,7 @@
 //  MessageAttachmentManager.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/23/26.
 //
 
 import Foundation

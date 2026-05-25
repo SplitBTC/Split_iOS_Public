@@ -1,6 +1,7 @@
 //  BitcoinPending.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 2/15/26.
 //
 import SwiftUI
 
@@ -96,10 +97,7 @@ private extension BitcoinPending {
                 .foregroundColor(.white)
 
             Text("""
-
-            There is a fee to move your Bitcoin from your on-chain to your Split wallet so that you can spend your Bitcoin over the Lightning Network. Split does not receive any portion of this fee. Our goal is to negate all of your purchasing fees with our Bitcoin rewards progam.
-
-            The fee rises and falls based on Bitcoin network congestion. We let you choose when you want to claim the deposit to give you maximum control over costs.
+            Network fees rise and fall based on Bitcoin network congestion. We let you choose when you want to claim the deposit to give you maximum control over costs.
             """)
                 .font(.footnote)
                 .foregroundColor(.gray)
@@ -372,20 +370,6 @@ private extension BitcoinPending {
                 txid: deposit.txid,
                 vout: deposit.vout,
                 satPerVbyte: feeRate
-            )
-
-            // Log the onramp purchase reward (only applies if this txid matches a fulfilled Stripe onramp txid)
-            postRewardOnRampBuy(
-                walletManager: walletManager,
-                authManager: authManager,
-                txid: deposit.txid,
-                depositAmountSats: deposit.amountSats,
-                onSuccess: { resp in
-                    print("Onramp reward response:", resp)
-                },
-                onError: { err in
-                    print("Onramp reward error:", err)
-                }
             )
 
             selectedDeposit = nil

@@ -2,6 +2,7 @@
 //  SupportView.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/24/26.
 //
 
 import SwiftUI
@@ -16,7 +17,7 @@ struct SupportView: View {
     private let accentBlue = Color.splitBrandBlue
     private let accentPink = Color.splitBrandPink
     private let supportLightningAddress = "support@example.com"
-    private let supportDisplayName = "Support"
+    private let supportDisplayName = "Taylor"
 
     @State private var showComposeSheet = false
     @State private var pendingThreadAfterCompose: ActiveThreadDestination?

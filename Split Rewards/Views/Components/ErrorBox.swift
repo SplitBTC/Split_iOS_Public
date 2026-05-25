@@ -2,6 +2,7 @@
 //  ErrorBox.swift
 //  Split
 //
+//  Created by TeeVee on 1/1/26.
 //
 import SwiftUI
 

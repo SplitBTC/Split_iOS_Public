@@ -2,6 +2,7 @@
 //  MessageSyncManager.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/20/26.
 //
 
 import Foundation
@@ -18,6 +19,27 @@ final class MessageSyncManager {
     private let defaultOutgoingStatusMinimumInterval: TimeInterval = 30
 
     private init() {}
+
+    private enum InboxRecoveryFailureReason: String {
+        case invalidStoredKey
+        case ciphertextDecryptFailed
+        case sealedPayloadDecodeFailed
+        case sealedEnvelopeVerificationFailed
+
+        var shouldRotateMessagingIdentity: Bool {
+            switch self {
+            case .invalidStoredKey, .ciphertextDecryptFailed:
+                return true
+            case .sealedPayloadDecodeFailed, .sealedEnvelopeVerificationFailed:
+                return false
+            }
+        }
+    }
+
+    private struct InboxRecoveryCandidate {
+        let message: InboxMessage
+        let reason: InboxRecoveryFailureReason
+    }
 
     struct SyncResult {
         let fetchedCount: Int
@@ -152,7 +174,7 @@ final class MessageSyncManager {
 
         var decryptedMessages: [StoredMessage] = []
         var failedCount = 0
-        var rekeyCandidateMessages: [InboxMessage] = []
+        var recoveryCandidates: [InboxRecoveryCandidate] = []
 
         for inboxMessage in inboxMessages {
             do {
@@ -202,14 +224,17 @@ final class MessageSyncManager {
                 decryptedMessages.append(storedMessage)
             } catch {
                 failedCount += 1
-                if shouldRequestRekey(for: error) {
-                    rekeyCandidateMessages.append(inboxMessage)
+                if let reason = serverRecoveryFailureReason(for: error) {
+                    recoveryCandidates.append(InboxRecoveryCandidate(
+                        message: inboxMessage,
+                        reason: reason
+                    ))
                 }
             }
         }
 
         let persistedIds = try MessageStore.shared.upsert(decryptedMessages)
-        if !rekeyCandidateMessages.isEmpty {
+        if !recoveryCandidates.isEmpty {
             let currentMessagingPubkey: String?
             do {
                 _ = try await MessageKeyManager.shared.ensureRegistered(
@@ -227,22 +252,26 @@ final class MessageSyncManager {
                 currentMessagingPubkey = nil
             }
 
-            let rekeyRequiredMessageIds = rekeyCandidateMessages.compactMap { inboxMessage in
+            let rekeyRequiredMessageIds = recoveryCandidates.compactMap { candidate in
                 shouldRequestRekey(
-                    for: inboxMessage,
+                    for: candidate.message,
                     currentMessagingPubkey: currentMessagingPubkey
                 )
-                    ? inboxMessage.id
+                    ? candidate.message.id
                     : nil
             }
-            let decryptFailedMessageIds = rekeyCandidateMessages.compactMap { inboxMessage in
+            let decryptFailedCandidates = recoveryCandidates.filter { candidate in
                 shouldMarkDecryptFailed(
-                    for: inboxMessage,
+                    for: candidate.message,
                     currentMessagingPubkey: currentMessagingPubkey
                 )
-                    ? inboxMessage.id
-                    : nil
             }
+            let decryptFailedMessageIds = decryptFailedCandidates.map { $0.message.id }
+            let decryptFailedReasons = Dictionary(
+                uniqueKeysWithValues: decryptFailedCandidates.map { candidate in
+                    (candidate.message.id, candidate.reason.rawValue)
+                }
+            )
 
             if !rekeyRequiredMessageIds.isEmpty {
                 _ = try await RekeyMessagesAPI.markMessagesRekeyRequired(
@@ -255,9 +284,26 @@ final class MessageSyncManager {
             if !decryptFailedMessageIds.isEmpty {
                 _ = try await DecryptFailedMessagesAPI.markMessagesDecryptFailed(
                     messageIds: decryptFailedMessageIds,
+                    failureReasons: decryptFailedReasons,
                     authManager: authManager,
                     walletManager: walletManager
                 )
+                if decryptFailedCandidates.contains(where: { $0.reason.shouldRotateMessagingIdentity }) {
+                    do {
+                        _ = try await MessageKeyManager.shared.rotateMessagingIdentityAfterSameKeyFailure(
+                            authManager: authManager,
+                            walletManager: walletManager,
+                            reason: "same-key \(decryptFailedReasons.values.sorted().joined(separator: ","))"
+                        )
+                        await MessagingDeviceTokenManager.shared.syncDeviceTokenIfPossible(
+                            authManager: authManager,
+                            walletManager: walletManager,
+                            force: true
+                        )
+                    } catch {
+                        print("Failed to rotate messaging identity after same-key failure: \(error.localizedDescription)")
+                    }
+                }
             }
         }
         let ackResponse = try await AckMessagesAPI.acknowledgeMessages(
@@ -336,7 +382,7 @@ final class MessageSyncManager {
                 } catch {
                     print("Failed to resend same-key retry-required message \(status.id): \(error.localizedDescription)")
                 }
-            case "failed_same_key":
+            case "failed_same_key", "undelivered":
                 do {
                     let didUpdate = try MessageStore.shared.updateOutgoingMessageDeliveryState(
                         serverMessageId: status.id,
@@ -368,22 +414,25 @@ final class MessageSyncManager {
         return try JSONDecoder().decode(SealedSenderMessagePayload.self, from: sealedPayloadData)
     }
 
-    private func shouldRequestRekey(for error: Error) -> Bool {
+    private func serverRecoveryFailureReason(for error: Error) -> InboxRecoveryFailureReason? {
         if let messageKeyError = error as? MessageKeyManager.MessageKeyError,
            case .invalidStoredKey = messageKeyError {
-            return true
+            return .invalidStoredKey
         }
 
-        if let cryptoError = error as? MessageCryptoManager.MessageCryptoError {
-            switch cryptoError {
-            case .invalidCiphertext, .invalidPlaintext, .missingEnvelope:
-                return true
-            case .invalidBase64, .invalidRecipientPublicKey, .invalidEphemeralPublicKey:
-                return false
-            }
+        if error is MessageKeyBindingVerifier.VerificationError {
+            return .sealedEnvelopeVerificationFailed
         }
 
-        return false
+        if error is DecodingError {
+            return .sealedPayloadDecodeFailed
+        }
+
+        if error is MessageCryptoManager.MessageCryptoError {
+            return .ciphertextDecryptFailed
+        }
+
+        return nil
     }
 
     private func shouldRequestRekey(

@@ -7,6 +7,7 @@
 //  - This manager keeps an in-memory "session valid until" to avoid re-signing too often,
 //    and can optionally confirm cookie validity via /session.
 //
+//  Created by TeeVee on 12/17/25.
 //
 import Foundation
 import BreezSdkSpark

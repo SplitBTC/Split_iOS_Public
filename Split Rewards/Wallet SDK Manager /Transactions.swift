@@ -1,6 +1,7 @@
 //  Transactions.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 12/17/25.
 //
 import Foundation
 import BreezSdkSpark
@@ -8,7 +9,7 @@ import BreezSdkSpark
 @MainActor
 extension WalletManager {
 
-    // MARK: - UI-friendly transaction row (Breez-backed)
+    // MARK: - UI-friendly transaction row
 
     struct TransactionRow: Identifiable, Equatable {
         let id: String
@@ -26,6 +27,7 @@ extension WalletManager {
 
         // Canonical user-facing memo/description from Breez payment details
         let note: String
+        let userLog: String?
 
         // Raw sats for sorting / math / export
         let amountSats: Int64
@@ -45,6 +47,78 @@ extension WalletManager {
         let txReferenceLabel: String?
         let txReference: String?
         let hasConversion: Bool
+
+        func withUserLog(_ userLog: String?) -> TransactionRow {
+            TransactionRow(
+                id: id,
+                transactionDate: transactionDate,
+                direction: direction,
+                btcAmount: btcAmount,
+                feeBtcAmount: feeBtcAmount,
+                network: network,
+                status: status,
+                dateString: dateString,
+                note: note,
+                userLog: Self.normalizedUserLog(userLog),
+                amountSats: amountSats,
+                feeSats: feeSats,
+                method: method,
+                destinationPubkey: destinationPubkey,
+                invoice: invoice,
+                lnAddress: lnAddress,
+                lnurlDomain: lnurlDomain,
+                lnurlComment: lnurlComment,
+                senderComment: senderComment,
+                paymentHash: paymentHash,
+                preimage: preimage,
+                expiryDateString: expiryDateString,
+                txReferenceLabel: txReferenceLabel,
+                txReference: txReference,
+                hasConversion: hasConversion
+            )
+        }
+
+        func withDestinationMetadata(
+            destinationPubkey: String?,
+            paymentHash: String?
+        ) -> TransactionRow {
+            TransactionRow(
+                id: id,
+                transactionDate: transactionDate,
+                direction: direction,
+                btcAmount: btcAmount,
+                feeBtcAmount: feeBtcAmount,
+                network: network,
+                status: status,
+                dateString: dateString,
+                note: note,
+                userLog: userLog,
+                amountSats: amountSats,
+                feeSats: feeSats,
+                method: method,
+                destinationPubkey: destinationPubkey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? self.destinationPubkey,
+                invoice: invoice,
+                lnAddress: lnAddress,
+                lnurlDomain: lnurlDomain,
+                lnurlComment: lnurlComment,
+                senderComment: senderComment,
+                paymentHash: paymentHash?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank ?? self.paymentHash,
+                preimage: preimage,
+                expiryDateString: expiryDateString,
+                txReferenceLabel: txReferenceLabel,
+                txReference: txReference,
+                hasConversion: hasConversion
+            )
+        }
+
+        private static func normalizedUserLog(_ value: String?) -> String? {
+            guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !normalized.isEmpty else {
+                return nil
+            }
+
+            return normalized
+        }
     }
 
     // MARK: - Transaction rows
@@ -79,6 +153,7 @@ extension WalletManager {
             status: status,
             dateString: dateString,
             note: note,
+            userLog: nil,
             amountSats: amountSats,
             feeSats: feeSats,
             method: paymentMethodString(payment),
@@ -103,9 +178,16 @@ extension WalletManager {
         guard let details = payment.details else { return "" }
 
         switch details {
-        case .lightning(let description, _, _, _, _, _, _):
-            return (description ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        case .lightning(let description, _, _, _, let lnurlPayInfo, _, _):
+            let normalizedDescription = cleaned(description)
+            let normalizedLnurlComment = cleaned(lnurlPayInfo?.comment)
+
+            if let normalizedLnurlComment,
+               normalizedLnurlComment.range(of: "zap from ", options: [.caseInsensitive, .anchored]) != nil {
+                return normalizedLnurlComment
+            }
+
+            return normalizedDescription ?? normalizedLnurlComment ?? ""
 
         case .spark(let invoiceDetails, _, _):
             return (invoiceDetails?.description ?? "")
@@ -468,9 +550,3 @@ extension WalletManager {
         return try await fetchBitcoinPriceUSD(at: transactionDate)
     }
 }
-
-
-
-
-
-

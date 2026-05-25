@@ -1,6 +1,7 @@
 //  SendPayments.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 1/11/25.
 //
 import Foundation
 import BreezSdkSpark
@@ -9,10 +10,16 @@ import BigNumber
 @MainActor
 extension WalletManager {
 
+    enum PreparedPaymentConfirmationResult: Equatable {
+        case completed(paymentId: String)
+        case pending
+        case failed
+    }
+
     // MARK: - Shared error copy
 
     private func sendFailureMessage(details: String) -> String {
-        """
+        return """
         Unable to send payment.
 
         Details:
@@ -52,6 +59,23 @@ extension WalletManager {
         }
     }
 
+    private func previewAmountSats(
+        requestedAmountSats: UInt64,
+        routingFeeSats: UInt64?,
+        feesIncluded: Bool
+    ) -> UInt64 {
+        guard feesIncluded, let routingFeeSats else {
+            return requestedAmountSats
+        }
+
+        return requestedAmountSats > routingFeeSats ? requestedAmountSats - routingFeeSats : 0
+    }
+
+    private func fiatUSD(for sats: UInt64) -> Double? {
+        guard let rate = btcUsdRate, sats > 0 else { return nil }
+        return (Double(sats) / 100_000_000.0) * rate
+    }
+
     // MARK: - 2-step send flow (prepare + confirm)
 
     /// Prepare a payment and return a preview for a confirmation screen.
@@ -64,6 +88,7 @@ extension WalletManager {
     func preparePayment(
         paymentRequest: String,
         amountSatsOverride: UInt64? = nil,
+        feesIncluded: Bool = false,
         lnurlComment: String? = nil
     ) async -> PaymentPreview? {
         lastErrorMessage = nil
@@ -81,6 +106,7 @@ extension WalletManager {
             let normalizedLnurlComment = lnurlComment?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfBlank
+            let feePolicy: FeePolicy? = feesIncluded ? .feesIncluded : nil
 
             // First parse so we can route LNURL-Pay / Lightning address correctly.
             let inputType = try await sdk.parse(input: paymentRequest)
@@ -94,10 +120,11 @@ extension WalletManager {
                 }
 
                 let req = PrepareLnurlPayRequest(
-                    amountSats: amountSats,
+                    amount: BInt(amountSats),
                     payRequest: details.payRequest,
                     comment: normalizedLnurlComment,
-                    validateSuccessActionUrl: true
+                    validateSuccessActionUrl: true,
+                    feePolicy: feePolicy
                 )
 
                 let prepareResponse = try await sdk.prepareLnurlPay(request: req)
@@ -105,17 +132,20 @@ extension WalletManager {
                 let previewId = UUID()
                 preparedPayments[previewId] = .lnurl(prepareResponse)
 
-                let fiatUSD: Double? = {
-                    guard let rate = btcUsdRate, amountSats > 0 else { return nil }
-                    return (Double(amountSats) / 100_000_000.0) * rate
-                }()
+                let responseFeesIncluded = prepareResponse.feePolicy == .feesIncluded
+                let previewSats = previewAmountSats(
+                    requestedAmountSats: amountSats,
+                    routingFeeSats: prepareResponse.feeSats,
+                    feesIncluded: responseFeesIncluded
+                )
 
                 return PaymentPreview(
                     id: previewId,
                     paymentRequest: paymentRequest,
-                    amountSats: amountSats,
-                    amountFiatUSD: fiatUSD,
+                    amountSats: previewSats,
+                    amountFiatUSD: fiatUSD(for: previewSats),
                     routingFeeSats: prepareResponse.feeSats,
+                    feesIncluded: responseFeesIncluded,
                     recipientName: nil
                 )
             }
@@ -127,10 +157,11 @@ extension WalletManager {
                 }
 
                 let req = PrepareLnurlPayRequest(
-                    amountSats: amountSats,
+                    amount: BInt(amountSats),
                     payRequest: details,                 // ✅ pass details, not String
                     comment: normalizedLnurlComment,
-                    validateSuccessActionUrl: true
+                    validateSuccessActionUrl: true,
+                    feePolicy: feePolicy
                 )
 
                 let prepareResponse = try await sdk.prepareLnurlPay(request: req)
@@ -138,17 +169,20 @@ extension WalletManager {
                 let previewId = UUID()
                 preparedPayments[previewId] = .lnurl(prepareResponse)
 
-                let fiatUSD: Double? = {
-                    guard let rate = btcUsdRate, amountSats > 0 else { return nil }
-                    return (Double(amountSats) / 100_000_000.0) * rate
-                }()
+                let responseFeesIncluded = prepareResponse.feePolicy == .feesIncluded
+                let previewSats = previewAmountSats(
+                    requestedAmountSats: amountSats,
+                    routingFeeSats: prepareResponse.feeSats,
+                    feesIncluded: responseFeesIncluded
+                )
 
                 return PaymentPreview(
                     id: previewId,
                     paymentRequest: paymentRequest,
-                    amountSats: amountSats,
-                    amountFiatUSD: fiatUSD,
+                    amountSats: previewSats,
+                    amountFiatUSD: fiatUSD(for: previewSats),
                     routingFeeSats: prepareResponse.feeSats,
+                    feesIncluded: responseFeesIncluded,
                     recipientName: nil
                 )
             }
@@ -159,25 +193,10 @@ extension WalletManager {
             let prepareResponse = try await sdk.prepareSendPayment(
                 request: PrepareSendPaymentRequest(
                     paymentRequest: paymentRequest,
-                    amount: amountBInt
+                    amount: amountBInt,
+                    feePolicy: feePolicy
                 )
             )
-
-            // Determine sats for preview.
-            let sats: UInt64
-            if let override = amountSatsOverride {
-                sats = override
-            } else if case .bolt11Invoice(v1: let invoice) = inputType,
-                      let msat = invoice.amountMsat {
-                sats = UInt64(msat / 1_000)
-            } else {
-                sats = 0
-            }
-
-            let fiatUSD: Double? = {
-                guard let rate = btcUsdRate, sats > 0 else { return nil }
-                return (Double(sats) / 100_000_000.0) * rate
-            }()
 
             let routingFeeSats: UInt64? = {
                 switch prepareResponse.paymentMethod {
@@ -196,16 +215,38 @@ extension WalletManager {
                 }
             }()
 
+            // Determine sats for preview.
+            let requestedSats: UInt64
+            if let override = amountSatsOverride {
+                requestedSats = override
+            } else if case .bolt11Invoice(v1: let invoice) = inputType,
+                      let msat = invoice.amountMsat {
+                requestedSats = UInt64(msat / 1_000)
+            } else {
+                requestedSats = UInt64(prepareResponse.amount.description) ?? 0
+            }
+
+            let responseFeesIncluded = prepareResponse.feePolicy == .feesIncluded
+            let sats = previewAmountSats(
+                requestedAmountSats: requestedSats,
+                routingFeeSats: routingFeeSats,
+                feesIncluded: responseFeesIncluded
+            )
+
             let previewId = UUID()
             preparedPayments[previewId] = .send(prepareResponse)
+            let bolt11Metadata = bolt11PreviewMetadata(from: inputType)
 
             return PaymentPreview(
                 id: previewId,
                 paymentRequest: paymentRequest,
                 amountSats: sats,
-                amountFiatUSD: fiatUSD,
+                amountFiatUSD: fiatUSD(for: sats),
                 routingFeeSats: routingFeeSats,
-                recipientName: nil
+                feesIncluded: responseFeesIncluded,
+                recipientName: bolt11Metadata.recipientName,
+                destinationPubkey: bolt11Metadata.destinationPubkey,
+                paymentHash: bolt11Metadata.paymentHash
             )
 
         } catch {
@@ -214,22 +255,39 @@ extension WalletManager {
         }
     }
 
+    private func bolt11PreviewMetadata(from inputType: InputType) -> (
+        recipientName: String?,
+        destinationPubkey: String?,
+        paymentHash: String?
+    ) {
+        guard case .bolt11Invoice(v1: let invoice) = inputType else {
+            return (nil, nil, nil)
+        }
+
+        return (
+            invoice.description?.nilIfBlank,
+            invoice.payeePubkey.nilIfBlank,
+            invoice.paymentHash.nilIfBlank
+        )
+    }
+
     /// Confirm and send a previously prepared payment.
-    func confirmPreparedPayment(preview: PaymentPreview) async -> Bool {
+    func confirmPreparedPayment(preview: PaymentPreview) async -> PreparedPaymentConfirmationResult {
         lastErrorMessage = nil
 
         guard let sdk else {
             lastErrorMessage = "Wallet not initialized."
-            return false
+            return .failed
         }
 
         guard let prepared = preparedPayments[preview.id] else {
             lastErrorMessage = "Missing prepared payment state. Please try again."
-            return false
+            return .failed
         }
 
         do {
             let idempotencyKey = UUID().uuidString
+            let payment: Payment
 
             switch prepared {
             case .send(let prepareResponse):
@@ -237,23 +295,36 @@ extension WalletManager {
                     prepareResponse: prepareResponse,
                     idempotencyKey: idempotencyKey
                 )
-                _ = try await sdk.sendPayment(request: sendReq)
+                payment = try await sdk.sendPayment(request: sendReq).payment
 
             case .lnurl(let prepareLnurlResponse):
-                _ = try await sdk.lnurlPay(
+                payment = try await sdk.lnurlPay(
                     request: LnurlPayRequest(
                         prepareResponse: prepareLnurlResponse,
                         idempotencyKey: idempotencyKey
                     )
-                )
+                ).payment
             }
 
             preparedPayments.removeValue(forKey: preview.id)
-            return true
+
+            switch payment.status {
+            case .completed:
+                suppressOutgoingSuccessToast(for: payment.id)
+                return .completed(paymentId: payment.id)
+
+            case .pending:
+                return .pending
+
+            case .failed:
+                suppressOutgoingFailureToast(for: payment.id)
+                lastErrorMessage = "Failed to send payment."
+                return .failed
+            }
 
         } catch {
             lastErrorMessage = sendFailureMessage(details: error.localizedDescription)
-            return false
+            return .failed
         }
     }
 
@@ -279,7 +350,7 @@ extension WalletManager {
                     return false
                 }
                 let req = PrepareLnurlPayRequest(
-                    amountSats: amountSats,
+                    amount: BInt(amountSats),
                     payRequest: details.payRequest,
                     comment: nil,
                     validateSuccessActionUrl: true
@@ -302,7 +373,7 @@ extension WalletManager {
                 }
 
                 let req = PrepareLnurlPayRequest(
-                    amountSats: amountSats,
+                    amount: BInt(amountSats),
                     payRequest: details,                 // ✅ pass details, not String
                     comment: nil,
                     validateSuccessActionUrl: true
@@ -398,7 +469,27 @@ extension WalletManager {
             return nil
         }
     }
+
+    func decodeBolt11InvoiceMetadata(_ paymentRequest: String) async -> (
+        destinationPubkey: String?,
+        paymentHash: String?,
+        description: String?
+    )? {
+        guard let sdk else { return nil }
+
+        do {
+            let parsed = try await sdk.parse(input: paymentRequest)
+            guard case .bolt11Invoice(v1: let invoice) = parsed else {
+                return nil
+            }
+
+            return (
+                invoice.payeePubkey.nilIfBlank,
+                invoice.paymentHash.nilIfBlank,
+                invoice.description?.nilIfBlank
+            )
+        } catch {
+            return nil
+        }
+    }
 }
-
-
-

@@ -2,12 +2,13 @@
 //  OnChainAddress.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 1/16/26.
 //
 import BreezSdkSpark
 
 extension WalletManager {
 
-    /// Returns a Bitcoin on-chain receive address suitable for Stripe onramp.
+    /// Returns a fresh Bitcoin on-chain receive address.
     func getOnchainReceiveAddress() async throws -> String {
         guard let sdk else {
             throw WalletError.sdkNotInitialized
@@ -15,7 +16,7 @@ extension WalletManager {
 
         let response = try await sdk.receivePayment(
             request: ReceivePaymentRequest(
-                paymentMethod: ReceivePaymentMethod.bitcoinAddress
+                paymentMethod: ReceivePaymentMethod.bitcoinAddress(newAddress: true)
             )
         )
        
@@ -25,4 +26,3 @@ extension WalletManager {
         return response.paymentRequest
     }
 }
-

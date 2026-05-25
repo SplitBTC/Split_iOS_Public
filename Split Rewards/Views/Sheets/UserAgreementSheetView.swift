@@ -20,7 +20,7 @@ struct UserAgreementSheetView: View {
 
                 sectionTitle("2. About Split")
                 sectionText(
-                    "Split provides software that enables you to send and receive payments over the Bitcoin Lightning Network, message other users, create and share Proof of Spend posts, and, when available, participate in Split’s bitcoin rewards program based on spending with participating merchants. Split is not a bank, payment processor, money transmitter, or custodian. Split does not hold, control, or have access to your bitcoin, private keys, or wallet funds."
+                    "Split provides software that enables you to send and receive payments over the Bitcoin Lightning Network, message other users, and, when available, participate in Split’s bitcoin rewards program based on spending with participating merchants. Split is not a bank, payment processor, money transmitter, or custodian. Split does not hold, control, or have access to your bitcoin, private keys, or wallet funds."
                 )
 
                 sectionTitle("3. Non-Custodial Wallet and User Responsibility")
@@ -43,16 +43,16 @@ struct UserAgreementSheetView: View {
                 )
 
                 sectionText(
-                    "Split may provide messaging, sharing, and posting features, but Split does not guarantee message delivery, receipt, response, authenticity of counterparties, or successful interaction between users. You are solely responsible for evaluating any person, message, payment request, attachment, or content you choose to engage with through the Service."
+                    "Split may provide messaging and sharing features, but Split does not guarantee message delivery, receipt, response, authenticity of counterparties, or successful interaction between users. You are solely responsible for evaluating any person, message, payment request, attachment, or content you choose to engage with through the Service."
                 )
 
-                sectionTitle("6. Public Proof of Spend Posts")
+                sectionTitle("6. Public Websites and Shared Links")
                 sectionText(
-                    "Proof of Spend posts are intended to be public content. If you create a Proof of Spend post, you understand that it may be displayed in the app, on Split-operated web pages, and through public or shareable links. Do not include anything in a post, caption, or image that you expect to remain private or confidential."
+                    "Some Split-operated web pages, download links, or externally shareable resources may be public by design. Use discretion when choosing what information to submit through any public-facing or shareable surface."
                 )
 
                 sectionText(
-                    "You may delete your own posts through the Service, but copies may remain temporarily in caches, backups, logs, or previously shared links for a limited period. Split may remove or restrict posts at any time to enforce these Terms, respond to reports, comply with law, or protect users and the Service."
+                    "Copies of public-facing content or shared materials may remain temporarily in caches, backups, logs, or previously shared links for a limited period. Split may remove or restrict content or access at any time to enforce these Terms, comply with law, or protect users and the Service."
                 )
 
                 sectionTitle("7. Bitcoin Rewards Program")
@@ -88,7 +88,7 @@ struct UserAgreementSheetView: View {
 
                 sectionTitle("10. Prohibited and Illegal Use")
                 sectionText(
-                    "You may not use the Service for unlawful, fraudulent, abusive, harmful, or otherwise prohibited activity, including attempting to manipulate rewards, evade restrictions, impersonate others, spam users, interfere with the Service’s normal operation, or misuse messaging or posting features."
+                    "You may not use the Service for unlawful, fraudulent, abusive, harmful, or otherwise prohibited activity, including attempting to manipulate rewards, evade restrictions, impersonate others, spam users, interfere with the Service’s normal operation, or misuse messaging or sharing features."
                 )
 
                 sectionText(
@@ -96,7 +96,7 @@ struct UserAgreementSheetView: View {
                 )
 
                 sectionText(
-                    "All applicable civil, criminal, regulatory, and intellectual property laws apply to your use of Split’s messaging and posting features. You are solely responsible for the legality of your conduct and User Content. Split may report unlawful activity to law enforcement or other appropriate parties where permitted or required by law."
+                    "All applicable civil, criminal, regulatory, and intellectual property laws apply to your use of Split’s messaging and sharing features. You are solely responsible for the legality of your conduct and User Content. Split may report unlawful activity to law enforcement or other appropriate parties where permitted or required by law."
                 )
 
                 sectionTitle("11. Data Collection and Privacy Summary")
@@ -110,7 +110,7 @@ struct UserAgreementSheetView: View {
 
                 sectionTitle("12. Suspension, Moderation, and Termination")
                 sectionText(
-                    "Split may review, refuse, remove, restrict, or disable access to any User Content, messaging functionality, posting functionality, or account access at any time if we believe it may violate these Terms, create risk for users or third parties, harm the Service, or expose Split to legal or regulatory risk."
+                    "Split may review, refuse, remove, restrict, or disable access to any User Content, messaging functionality, sharing functionality, or account access at any time if we believe it may violate these Terms, create risk for users or third parties, harm the Service, or expose Split to legal or regulatory risk."
                 )
 
                 sectionText(
@@ -167,7 +167,6 @@ struct UserAgreementSheetView: View {
 #Preview {
     UserAgreementSheetView()
 }
-
 
 
 

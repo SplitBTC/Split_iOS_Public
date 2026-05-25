@@ -11,9 +11,21 @@ import AVFoundation
 
 struct QRCodeScannerView: UIViewRepresentable {
     let onCodeScanned: (String) -> Void
+    let preferredZoomFactor: CGFloat
+
+    init(
+        preferredZoomFactor: CGFloat = 1,
+        onCodeScanned: @escaping (String) -> Void
+    ) {
+        self.preferredZoomFactor = preferredZoomFactor
+        self.onCodeScanned = onCodeScanned
+    }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onCodeScanned: onCodeScanned)
+        Coordinator(
+            preferredZoomFactor: preferredZoomFactor,
+            onCodeScanned: onCodeScanned
+        )
     }
 
     func makeUIView(context: Context) -> UIView {
@@ -64,13 +76,23 @@ struct QRCodeScannerView: UIViewRepresentable {
 
     class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
         let onCodeScanned: (String) -> Void
+        let preferredZoomFactor: CGFloat
 
-        var session: AVCaptureSession?
         var previewLayer: AVCaptureVideoPreviewLayer?
         var didScanCode = false
-        let sessionQueue = DispatchQueue(label: "split.qr-code-scanner.session", qos: .userInitiated)
 
-        init(onCodeScanned: @escaping (String) -> Void) {
+        private static let sessionQueue = DispatchQueue(label: "split.qr-code-scanner.session", qos: .userInitiated)
+        private static var sharedSession: AVCaptureSession?
+        private static var sharedOutput: AVCaptureMetadataOutput?
+        private static weak var sharedDevice: AVCaptureDevice?
+        private static weak var activeCoordinator: Coordinator?
+        private static var stopGeneration = 0
+
+        init(
+            preferredZoomFactor: CGFloat,
+            onCodeScanned: @escaping (String) -> Void
+        ) {
+            self.preferredZoomFactor = preferredZoomFactor
             self.onCodeScanned = onCodeScanned
         }
 
@@ -99,48 +121,67 @@ struct QRCodeScannerView: UIViewRepresentable {
         }
 
         func configureSessionIfNeeded(in view: UIView) {
-            sessionQueue.async { [weak self, weak view] in
+            Self.sessionQueue.async { [weak self, weak view] in
                 guard let self else { return }
 
-                if let session = self.session {
-                    if !session.isRunning {
-                        session.startRunning()
+                Self.stopGeneration += 1
+                Self.activeCoordinator = self
+
+                let session: AVCaptureSession
+
+                if let existingSession = Self.sharedSession {
+                    Self.sharedOutput?.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+                    if let device = Self.sharedDevice {
+                        self.configureCameraDevice(device)
                     }
-                    return
+                    session = existingSession
+                } else {
+                    let newSession = AVCaptureSession()
+
+                    if newSession.canSetSessionPreset(.hd1920x1080) {
+                        newSession.sessionPreset = .hd1920x1080
+                    } else if newSession.canSetSessionPreset(.high) {
+                        newSession.sessionPreset = .high
+                    }
+
+                    guard let device = self.preferredCameraDevice() else {
+                        self.reportError("No camera available on this device.")
+                        return
+                    }
+
+                    self.configureCameraDevice(device)
+
+                    guard let input = try? AVCaptureDeviceInput(device: device),
+                          newSession.canAddInput(input) else {
+                        self.reportError("Unable to access camera input.")
+                        return
+                    }
+
+                    do {
+                        newSession.beginConfiguration()
+                        defer { newSession.commitConfiguration() }
+
+                        newSession.addInput(input)
+
+                        let output = AVCaptureMetadataOutput()
+                        guard newSession.canAddOutput(output) else {
+                            self.reportError("Unable to read camera output.")
+                            return
+                        }
+
+                        newSession.addOutput(output)
+                        output.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+                        output.metadataObjectTypes = [.qr]
+                        Self.sharedOutput = output
+                    }
+
+                    Self.sharedDevice = device
+                    Self.sharedSession = newSession
+                    session = newSession
                 }
-
-                let session = AVCaptureSession()
-
-                guard let device = AVCaptureDevice.default(for: .video) else {
-                    self.reportError("No camera available on this device.")
-                    return
-                }
-
-                guard let input = try? AVCaptureDeviceInput(device: device),
-                      session.canAddInput(input) else {
-                    self.reportError("Unable to access camera input.")
-                    return
-                }
-
-                session.beginConfiguration()
-                session.addInput(input)
-
-                let output = AVCaptureMetadataOutput()
-                guard session.canAddOutput(output) else {
-                    session.commitConfiguration()
-                    self.reportError("Unable to read camera output.")
-                    return
-                }
-
-                session.addOutput(output)
-                output.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
-                output.metadataObjectTypes = [.qr]
-                session.commitConfiguration()
 
                 let previewLayer = AVCaptureVideoPreviewLayer(session: session)
                 previewLayer.videoGravity = .resizeAspectFill
-
-                self.session = session
 
                 DispatchQueue.main.async { [weak self, weak view] in
                     guard let self, let view else { return }
@@ -149,17 +190,90 @@ struct QRCodeScannerView: UIViewRepresentable {
                     self.previewLayer = previewLayer
                 }
 
-                session.startRunning()
+                if !session.isRunning {
+                    session.startRunning()
+                }
+            }
+        }
+
+        private func preferredCameraDevice() -> AVCaptureDevice? {
+            let discoverySession = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [
+                    .builtInTripleCamera,
+                    .builtInDualWideCamera,
+                    .builtInDualCamera,
+                    .builtInWideAngleCamera
+                ],
+                mediaType: .video,
+                position: .back
+            )
+
+            return discoverySession.devices.first
+                ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+                ?? AVCaptureDevice.default(for: .video)
+        }
+
+        private func configureCameraDevice(_ device: AVCaptureDevice) {
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+
+                if device.isFocusModeSupported(.continuousAutoFocus) {
+                    device.focusMode = .continuousAutoFocus
+                } else if device.isFocusModeSupported(.autoFocus) {
+                    device.focusMode = .autoFocus
+                }
+
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
+                }
+
+                if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                    device.whiteBalanceMode = .continuousAutoWhiteBalance
+                }
+
+                if device.isSmoothAutoFocusSupported {
+                    device.isSmoothAutoFocusEnabled = true
+                }
+
+                if device.isSubjectAreaChangeMonitoringEnabled == false {
+                    device.isSubjectAreaChangeMonitoringEnabled = true
+                }
+
+                let requestedZoom = max(preferredZoomFactor, 1)
+                let cappedZoom = min(requestedZoom, device.activeFormat.videoMaxZoomFactor)
+                if abs(device.videoZoomFactor - cappedZoom) > 0.01 {
+                    device.videoZoomFactor = cappedZoom
+                }
+            } catch {
+                reportError("Unable to configure camera: \(error.localizedDescription)")
             }
         }
 
         func stopSession() {
-            sessionQueue.async { [weak self] in
-                guard let self else { return }
-                if let session = self.session, session.isRunning {
+            Self.sessionQueue.async { [self] in
+                guard Self.activeCoordinator === self || Self.activeCoordinator == nil else {
+                    return
+                }
+
+                if Self.activeCoordinator === self {
+                    Self.activeCoordinator = nil
+                    Self.sharedOutput?.setMetadataObjectsDelegate(nil, queue: nil)
+                }
+
+                Self.stopGeneration += 1
+                let stopGeneration = Self.stopGeneration
+
+                Self.sessionQueue.asyncAfter(deadline: .now() + 0.35) {
+                    guard Self.stopGeneration == stopGeneration,
+                          Self.activeCoordinator == nil,
+                          let session = Self.sharedSession,
+                          session.isRunning else {
+                        return
+                    }
+
                     session.stopRunning()
                 }
-                self.session = nil
             }
         }
     }

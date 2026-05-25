@@ -1,5 +1,5 @@
 {
-  "originHash" : "0a37881889696b4cc9672ce5d0801dcb063042e11bc75628b4289fc195c6361c",
+  "originHash" : "b0e7b2f1d2609e83275bbd85f4dba17e84e4a662e66cc7a33bc713723f2981bb",
   "pins" : [
     {
       "identity" : "bip39.swift",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/breez/breez-sdk-spark-swift",
       "state" : {
-        "revision" : "512df7f5ebd7e7de0f7f42a523631d4ed5ddd293",
-        "version" : "0.12.2"
+        "revision" : "d32d826ea192b6b772eac3d483afcd059bc6b22d",
+        "version" : "0.13.1"
       }
     },
     {
@@ -44,6 +44,15 @@
       "state" : {
         "revision" : "b07e961f4c999671cf8c2dc80e740899e8946013",
         "version" : "2.3.0"
+      }
+    },
+    {
+      "identity" : "swifttor",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FlorianHubl/SwiftTor",
+      "state" : {
+        "branch" : "main",
+        "revision" : "c2106380621945d578ead18c5d72b1170f02dbcc"
       }
     },
     {

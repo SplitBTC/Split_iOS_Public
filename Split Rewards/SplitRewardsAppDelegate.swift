@@ -2,6 +2,7 @@
 //  SplitRewardsAppDelegate.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 3/21/26.
 //
 
 import UIKit
@@ -66,8 +67,17 @@ final class SplitRewardsAppDelegate: NSObject, UIApplicationDelegate, UNUserNoti
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        guard isMessagingNotification(notification.request.content.userInfo) else {
+        let userInfo = notification.request.content.userInfo
+
+        guard isMessagingNotification(userInfo) else {
             completionHandler([])
+            return
+        }
+
+        if MessageThreadPresenceTracker.shared.shouldSuppressNotification(
+            for: extractConversationId(from: userInfo)
+        ) {
+            completionHandler([.sound])
             return
         }
 

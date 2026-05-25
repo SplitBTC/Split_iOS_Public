@@ -21,7 +21,7 @@ struct PrivacyPolicySheetView: View {
 
                 Text("1. Overview")
                     .font(.headline)
-                Text("Split is designed to be privacy-preserving by default. We provide non-custodial software that enables payments over the Bitcoin Lightning Network, private messaging between users, public Proof of Spend posts, and, when available, participation in Split’s bitcoin rewards program. We do not custody user funds.")
+                Text("Split is designed to be privacy-preserving by default. We provide non-custodial software that enables payments over the Bitcoin Lightning Network, private messaging between users, and, when available, participation in Split’s bitcoin rewards program. We do not custody user funds.")
 
                 Text("2. Information We Collect")
                     .font(.headline)
@@ -56,14 +56,10 @@ struct PrivacyPolicySheetView: View {
 
                 Text("2.4 Messaging, Attachment, and Notification Data")
                     .font(.headline)
-                Text("If you use Split’s messaging features, Split may process limited information necessary to route and deliver private messages, including sender and recipient identifiers, Lightning addresses, messaging public keys, message type, timestamps, delivery state, and messaging device tokens used for push delivery. If you send private messaging attachments, Split may also process limited attachment metadata such as file size, content type, and related delivery status.")
+                Text("If you use Split’s messaging features, Split may process limited information necessary to route and deliver private messages while they are pending, including sender and recipient identifiers, Lightning addresses, messaging public keys, message type, timestamps, delivery state, and messaging device tokens used for push delivery. If you send private messaging attachments, Split may also process limited attachment metadata such as file size, content type, and related delivery status.")
                 Text("Split’s private messaging system is designed so that private message content and private messaging attachment content are end-to-end encrypted between participating users. Our servers are intended to receive and temporarily store encrypted message envelopes and encrypted private attachment blobs rather than plaintext private content. Split may still process the metadata described above to route, deliver, and secure the messaging service.")
 
-                Text("2.5 Proof of Spend Post Data")
-                    .font(.headline)
-                Text("If you create a Proof of Spend post, Split may collect and display the information you choose to publish, including a photo, caption, place or note text, Lightning address, profile photo (if any), bitcoin amount, transaction timestamp, and related post metadata. Proof of Spend posts are public content and may appear in the app, on Split-operated web pages, and at public or shareable URLs.")
-
-                Text("2.6 Device, Website, and Usage Information")
+                Text("2.5 Device, Website, and Usage Information")
                     .font(.headline)
                 Text("We may collect limited technical information necessary to operate and secure the Service, such as app version, basic device information, IP-derived region (approximate), and error logs/crash diagnostics. Our public website may also use analytics tags, cookies, or similar technologies to understand traffic and improve the Service. This information is used for reliability, debugging, security, and product improvement.")
 
@@ -72,7 +68,6 @@ struct PrivacyPolicySheetView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("• Operate and maintain the Service")
                     Text("• Route and deliver private messages and private messaging attachments")
-                    Text("• Store, display, and share public Proof of Spend posts that you choose to publish")
                     Text("• Identify participating merchants using technical identifiers (e.g., merchant public keys)")
                     Text("• Calculate rewards eligibility and proportional rewards amounts")
                     Text("• Issue rewards payouts and maintain payout records")
@@ -83,11 +78,10 @@ struct PrivacyPolicySheetView: View {
                 }
                 Text("Split does not sell personal data.")
 
-                Text("4. Private Messaging, Encryption, and Public Posting")
+                Text("4. Private Messaging and Encryption")
                     .font(.headline)
                 Text("Split’s private messaging features are designed to use end-to-end encryption for message content and private messaging attachments between participating users. In the current mobile app, messaging private keys and a separate local messaging-storage key are kept in device secure storage, and decrypted local message history and cached private messaging attachments are re-encrypted at rest on device.")
-                Text("Private messages are temporarily queued on Split’s servers only as needed for delivery. In the current service, private message records awaiting recipient acknowledgement are generally retained for up to 24 hours if the recipient is offline and are deleted from the server when acknowledged or when they expire. Private messaging attachment blobs are stored separately as encrypted blobs and are deleted after confirmed recipient receipt or expiration, subject to limited operational delays.")
-                Text("Proof of Spend posts are different from private messages. Proof of Spend posts are public by design and are not end-to-end encrypted. If you post a photo, caption, place name, or other content to the Proof of Spend feed, that content may be visible to the public in the app, on Split’s website, and through public or shareable links.")
+                Text("Private messages are temporarily queued on Split’s servers only as needed for delivery. In the current service, private message records awaiting recipient acknowledgement are generally retained for up to 14 days if the recipient is offline. After a message is received, Split deletes the message relay record. Private messaging attachment blobs are stored separately as encrypted blobs and are deleted after confirmed recipient receipt or expiration, subject to limited operational delays.")
 
                 Text("5. Rewards Program and Merchant Attribution")
                     .font(.headline)
@@ -107,7 +101,6 @@ struct PrivacyPolicySheetView: View {
                     Text("• To investigate or prevent illegal activity, fraud, security threats, or abuse of the Service")
                 }
                 Text("If Split works with sponsors to fund rewards, Split may share high-level, aggregated program reporting (for example, total eligible spend or total rewards distributed) that is not intended to identify individual users.")
-                Text("If you publish a Proof of Spend post, the content of that post may be visible to other users and to the public. If you share a post link, anyone with access to that link may be able to view the post.")
 
                 Text("8. Data Security")
                     .font(.headline)
@@ -116,12 +109,12 @@ struct PrivacyPolicySheetView: View {
                 Text("9. Data Retention")
                     .font(.headline)
                 Text("We retain information only for as long as necessary to operate the Service, calculate and administer rewards, comply with legal obligations, and enforce our Terms of Service. We periodically review and delete data that is no longer required.")
-                Text("Different data types may have different retention periods. For example, private messages awaiting delivery are generally retained only temporarily, while public Proof of Spend posts may remain available until you delete them, Split removes them, or they are otherwise removed from the Service.")
+                Text("Different data types may have different retention periods. For example, private messages awaiting delivery are generally retained only temporarily, and successfully received private message relay records are deleted after recipient acknowledgement. Some operational records may be retained longer where necessary for security, fraud prevention, legal compliance, or rewards administration.")
 
                 Text("10. Your Choices")
                     .font(.headline)
-                Text("You may stop using the Service at any time. You may choose whether to upload a profile photo, use private messaging, or publish a Proof of Spend post. Because Proof of Spend posts are public, you should carefully consider what you choose to publish.")
-                Text("You may delete your own Proof of Spend posts through the Service. Because Split does not collect traditional personal identity information for typical use, there may be limited ability to access, modify, or delete all data associated with your use of the Service, especially where retention is necessary for security, fraud prevention, legal compliance, or rewards administration.")
+                Text("You may stop using the Service at any time. You may choose whether to upload a profile photo or use private messaging.")
+                Text("Because Split does not collect traditional personal identity information for typical use, there may be limited ability to access, modify, or delete all data associated with your use of the Service, especially where retention is necessary for security, fraud prevention, legal compliance, or rewards administration.")
 
                 Text("11. Children’s Privacy")
                     .font(.headline)
@@ -147,6 +140,3 @@ struct PrivacyPolicySheetView: View {
 #Preview {
     PrivacyPolicySheetView()
 }
-
-
-

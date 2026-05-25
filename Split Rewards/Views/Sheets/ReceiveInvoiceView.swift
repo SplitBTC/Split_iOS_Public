@@ -39,7 +39,7 @@ struct ReceiveInvoiceView: View {
 
                     Spacer()
 
-                    Text("Receive BTC")
+                    Text("Receive Bitcoin")
                         .font(.headline)
                         .foregroundColor(.white)
 
@@ -70,17 +70,17 @@ struct ReceiveInvoiceView: View {
                             .foregroundColor(.gray)
                             .font(.caption)
                         Spacer()
-                        Text(String(format: "$%.2f", info.amountUsd))
+                        Text(amountUsdText)
                             .foregroundColor(.white)
                             .font(.body)
                     }
 
                     HStack {
-                        Text("BTC")
+                        Text("Sats")
                             .foregroundColor(.gray)
                             .font(.caption)
                         Spacer()
-                        Text(String(format: "%.8f BTC", info.amountBtc))
+                        Text(amountSatsText)
                             .foregroundColor(.white)
                             .font(.body)
                     }
@@ -101,6 +101,7 @@ struct ReceiveInvoiceView: View {
                         .background(Color.splitInputSurfaceSecondary)
                         .cornerRadius(12)
                     }
+
                 }
                 .padding()
                 .background(Color.splitInputSurface)
@@ -127,6 +128,22 @@ struct ReceiveInvoiceView: View {
         }
     }
 
+    private var amountUsdText: String {
+        guard let amountUsd = info.amountUsd else {
+            return "Payer chooses"
+        }
+
+        return String(format: "$%.2f", amountUsd)
+    }
+
+    private var amountSatsText: String {
+        guard let amountSats = info.amountSats else {
+            return "Payer chooses"
+        }
+
+        return formatSats(amountSats)
+    }
+
     // MARK: - QR Code
 
     private var qrImage: Image? {
@@ -149,5 +166,12 @@ struct ReceiveInvoiceView: View {
 
     private func copyInvoice() {
         UIPasteboard.general.string = info.invoice
+    }
+
+    private func formatSats(_ sats: UInt64) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        let formatted = formatter.string(from: NSNumber(value: sats)) ?? "\(sats)"
+        return "\(formatted) sats"
     }
 }

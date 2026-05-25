@@ -1,6 +1,7 @@
 //  WalletManager.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 12/8/25.
 //
 import Foundation
 import Combine
@@ -21,14 +22,34 @@ final class WalletManager: ObservableObject {
         case error(String)      // Fatal-ish error to show in the UI
     }
     
-    enum WalletError: Error {
+    enum WalletError: Error, LocalizedError {
         case sdkNotInitialized
         case invalidSeedPhrase
+
+        var errorDescription: String? {
+            switch self {
+            case .sdkNotInitialized:
+                return "Wallet not initialized."
+            case .invalidSeedPhrase:
+                return "Invalid seed phrase."
+            }
+        }
     }
-    
+
     /// Lightweight data model for the "review & confirm" send screen.
     struct PaymentPreview: Identifiable, Equatable {
+        enum Backend: Equatable {
+            case spark
+            case lnd
+            case nwc
+            case coreLightning
+            case eclair
+            case sparkSubwallet
+        }
+
         let id: UUID
+
+        let backend: Backend
         
         /// The raw invoice / address / Spark address string.
         let paymentRequest: String
@@ -42,9 +63,52 @@ final class WalletManager: ObservableObject {
         /// Estimated routing / network fee in sats (if known).
         /// Populated from the Breez `PrepareSendPaymentResponse.paymentMethod`.
         let routingFeeSats: UInt64?
+
+        /// True when Breez will deduct the fee from the requested amount.
+        let feesIncluded: Bool
         
         /// Optional human-readable recipient label (if available).
         let recipientName: String?
+
+        /// Optional LND-specific amount override for amountless BOLT11 invoices.
+        let lndAmountOverrideSats: Int64?
+
+        /// Lightning destination pubkey, when the active wallet can expose it before send.
+        let destinationPubkey: String?
+
+        /// Lightning payment hash, when the active wallet can expose it before send.
+        let paymentHash: String?
+
+        /// Whether the backend matched the Lightning destination pubkey to a rewards merchant.
+        let rewardEligible: Bool?
+
+        init(
+            id: UUID,
+            backend: Backend = .spark,
+            paymentRequest: String,
+            amountSats: UInt64,
+            amountFiatUSD: Double?,
+            routingFeeSats: UInt64?,
+            feesIncluded: Bool,
+            recipientName: String?,
+            lndAmountOverrideSats: Int64? = nil,
+            destinationPubkey: String? = nil,
+            paymentHash: String? = nil,
+            rewardEligible: Bool? = nil
+        ) {
+            self.id = id
+            self.backend = backend
+            self.paymentRequest = paymentRequest
+            self.amountSats = amountSats
+            self.amountFiatUSD = amountFiatUSD
+            self.routingFeeSats = routingFeeSats
+            self.feesIncluded = feesIncluded
+            self.recipientName = recipientName
+            self.lndAmountOverrideSats = lndAmountOverrideSats
+            self.destinationPubkey = destinationPubkey
+            self.paymentHash = paymentHash
+            self.rewardEligible = rewardEligible
+        }
     }
     
     // MARK: - Published properties used by SwiftUI
@@ -54,6 +118,7 @@ final class WalletManager: ObservableObject {
     @Published var fiatBalanceUSD: Double? = nil
     @Published var isSyncing: Bool = false
     @Published var lastErrorMessage: String?
+    @Published private(set) var isStoredWalletRecoveryFlowActive: Bool = false
     
     /// When the user taps “Create Wallet”, we generate a mnemonic and store it here.
     /// The UI can show a SeedPhraseBackupView while this is non-nil.
@@ -103,6 +168,9 @@ final class WalletManager: ObservableObject {
     /// Set of payment identifiers we've already sent to the backend (per app lifetime).
     /// Key is `paymentHash` if available, otherwise `payment.id`.
     var processedPaymentIds = Set<String>()
+    private var suppressedOutgoingSuccessPaymentIds = Set<String>()
+    private var suppressedOutgoingFailurePaymentIds = Set<String>()
+    var didAttemptSilentWalletRepairInCurrentStartupFlow = false
     
     // MARK: - Refresh coalescing (debounce)
     /// Coalesce multiple Breez events into a single refresh.
@@ -138,6 +206,22 @@ final class WalletManager: ObservableObject {
                 print("⚠️ [WalletManager \(self.instanceId)] scheduleRefresh failed: \(msg)")
             }
         }
+    }
+
+    func suppressOutgoingSuccessToast(for paymentId: String) {
+        suppressedOutgoingSuccessPaymentIds.insert(paymentId)
+    }
+
+    func consumeSuppressedOutgoingSuccessToastIfNeeded(paymentId: String) -> Bool {
+        suppressedOutgoingSuccessPaymentIds.remove(paymentId) != nil
+    }
+
+    func suppressOutgoingFailureToast(for paymentId: String) {
+        suppressedOutgoingFailurePaymentIds.insert(paymentId)
+    }
+
+    func consumeSuppressedOutgoingFailureToastIfNeeded(paymentId: String) -> Bool {
+        suppressedOutgoingFailurePaymentIds.remove(paymentId) != nil
     }
     
     // MARK: - Init
@@ -179,6 +263,17 @@ final class WalletManager: ObservableObject {
     }
 }
 
+@MainActor
+extension WalletManager {
+    func activateStoredWalletRecoveryFlow() {
+        isStoredWalletRecoveryFlowActive = true
+    }
+
+    func clearStoredWalletRecoveryFlow() {
+        isStoredWalletRecoveryFlowActive = false
+    }
+}
+
 // MARK: - Helpers
 
 extension Optional where Wrapped == String {
@@ -217,7 +312,3 @@ extension WalletManager {
         )
     }
 }
-
-
-
-

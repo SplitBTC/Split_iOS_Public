@@ -2,6 +2,7 @@
 //  SeedCycle.swift
 //  Split Rewards
 //
+//  Created by TeeVee on 12/8/25.
 //
 
 import Foundation
@@ -24,8 +25,8 @@ extension WalletManager {
             pendingSeedWords = words
             pendingSeedPhrase = phrase
 
-            // We only connect after explicit confirmation.
-            state = .noWallet
+            // We only connect after explicit confirmation. Leave the current
+            // wallet state alone so recovery-mode users can back out cleanly.
         } catch {
             let message = "Failed to generate seed phrase: \(error.localizedDescription)"
             state = .error(message)
@@ -41,6 +42,7 @@ extension WalletManager {
             return
         }
 
+        clearStoredWalletRecoveryFlow()
         saveLocalSeed(phrase)
 
         pendingSeedPhrase = nil
@@ -76,5 +78,4 @@ extension WalletManager {
         )
     }
 }
-
 
