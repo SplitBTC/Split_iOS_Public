@@ -474,12 +474,25 @@ struct CoreLightningPayResponse: Decodable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case paymentPreimage = "payment_preimage"
+        case preimage
         case paymentHash = "payment_hash"
         case createdAt = "created_at"
         case parts
         case amountMsat = "amount_msat"
         case amountSentMsat = "amount_sent_msat"
         case status
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        paymentPreimage = try container.decodeIfPresent(String.self, forKey: .paymentPreimage)
+            ?? container.decodeIfPresent(String.self, forKey: .preimage)
+        paymentHash = try container.decodeIfPresent(String.self, forKey: .paymentHash)
+        createdAt = try container.decodeIfPresent(CoreLightningFlexibleInt.self, forKey: .createdAt)
+        parts = try container.decodeIfPresent(Int.self, forKey: .parts)
+        amountMsat = try container.decodeIfPresent(CoreLightningMilliSatoshi.self, forKey: .amountMsat)
+        amountSentMsat = try container.decodeIfPresent(CoreLightningMilliSatoshi.self, forKey: .amountSentMsat)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
     }
 }
 
@@ -528,6 +541,7 @@ struct CoreLightningPay: Decodable, Equatable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case paymentHash = "payment_hash"
         case paymentPreimage = "payment_preimage"
+        case preimage
         case bolt11
         case description
         case destination
@@ -536,6 +550,21 @@ struct CoreLightningPay: Decodable, Equatable, Identifiable {
         case amountSentMsat = "amount_sent_msat"
         case createdAt = "created_at"
         case completedAt = "completed_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        paymentHash = try container.decodeIfPresent(String.self, forKey: .paymentHash)
+        paymentPreimage = try container.decodeIfPresent(String.self, forKey: .paymentPreimage)
+            ?? container.decodeIfPresent(String.self, forKey: .preimage)
+        bolt11 = try container.decodeIfPresent(String.self, forKey: .bolt11)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        destination = try container.decodeIfPresent(String.self, forKey: .destination)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        amountMsat = try container.decodeIfPresent(CoreLightningMilliSatoshi.self, forKey: .amountMsat)
+        amountSentMsat = try container.decodeIfPresent(CoreLightningMilliSatoshi.self, forKey: .amountSentMsat)
+        createdAt = try container.decodeIfPresent(CoreLightningFlexibleInt.self, forKey: .createdAt)
+        completedAt = try container.decodeIfPresent(CoreLightningFlexibleInt.self, forKey: .completedAt)
     }
 }
 
@@ -578,6 +607,24 @@ struct CoreLightningInvoice: Decodable, Equatable, Identifiable {
         case paidAt = "paid_at"
         case bolt11
         case paymentPreimage = "payment_preimage"
+        case preimage
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        label = try container.decodeIfPresent(String.self, forKey: .label)
+        paymentHash = try container.decodeIfPresent(String.self, forKey: .paymentHash)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        expiresAt = try container.decodeIfPresent(CoreLightningFlexibleInt.self, forKey: .expiresAt)
+        createdIndex = try container.decodeIfPresent(CoreLightningFlexibleInt.self, forKey: .createdIndex)
+        updatedIndex = try container.decodeIfPresent(CoreLightningFlexibleInt.self, forKey: .updatedIndex)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        amountMsat = try container.decodeIfPresent(CoreLightningMilliSatoshi.self, forKey: .amountMsat)
+        amountReceivedMsat = try container.decodeIfPresent(CoreLightningMilliSatoshi.self, forKey: .amountReceivedMsat)
+        paidAt = try container.decodeIfPresent(CoreLightningFlexibleInt.self, forKey: .paidAt)
+        bolt11 = try container.decodeIfPresent(String.self, forKey: .bolt11)
+        paymentPreimage = try container.decodeIfPresent(String.self, forKey: .paymentPreimage)
+            ?? container.decodeIfPresent(String.self, forKey: .preimage)
     }
 }
 

@@ -24,7 +24,7 @@ final class SparkSubwalletEventListener: EventListener, @unchecked Sendable {
                 return
             }
 
-            manager.scheduleRefresh()
+            await manager.handleSdkEvent(event)
         }
     }
 }

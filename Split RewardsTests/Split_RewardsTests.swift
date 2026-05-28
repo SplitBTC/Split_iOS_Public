@@ -356,6 +356,13 @@ struct Split_RewardsTests {
         #expect(metadata.description == "1 cup coffee")
     }
 
+    @Test func merchantPubkeyHashUsesBackendCompatibleNormalizationAndPrefix() throws {
+        let expectedHash = "2b3878883bc0b1757f1d979dfad4f9ea727aaac7a193f533579a9f16ac27efcd"
+
+        #expect(" 03E7156AE33B0A208D0744199163177E909E80176E55D97A2F221EDE0F934DD9AD ".splitRewardsMerchantPubkeyHashForTesting == expectedHash)
+        #expect("   ".splitRewardsMerchantPubkeyHashForTesting == nil)
+    }
+
     @Test func nwcBolt11DecoderRejectsInvalidChecksums() {
         let invalidChecksum = String(bolt11DonationInvoice.dropLast()) + "x"
 

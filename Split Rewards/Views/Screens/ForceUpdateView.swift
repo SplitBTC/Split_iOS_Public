@@ -13,7 +13,7 @@ struct ForcedUpdateView: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
 
-            Text("Please update to the latest version of Split for continued usage. If you are having any issues please do not hesitate to reach out to support@example.com")
+            Text("Please update to the latest version of Split for continued usage. If you are having any issues please reach out to support@example.com")
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .padding()
@@ -36,5 +36,4 @@ struct ForcedUpdateView: View {
         .padding()
     }
 }
-
 

@@ -26,6 +26,7 @@ struct SparkSubwalletSetupView: View {
     @State private var isWorking = false
     @State private var errorMessage: String?
     @State private var showSeedPhrase = false
+    @FocusState private var focusedRestoreWordIndex: Int?
 
     private let background = Color.splitSoftBackground
     private let cardSurface = Color.splitInputSurfaceTertiary
@@ -226,11 +227,16 @@ struct SparkSubwalletSetupView: View {
                         .autocorrectionDisabled(true)
                         .font(.body.weight(.semibold))
                         .foregroundColor(.white)
+                        .focused($focusedRestoreWordIndex, equals: index)
                 }
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
                 .background(Color.white.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    focusedRestoreWordIndex = index
+                }
             }
         }
     }

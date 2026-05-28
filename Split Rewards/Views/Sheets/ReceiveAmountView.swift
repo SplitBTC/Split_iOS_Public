@@ -118,6 +118,10 @@ struct ReceiveAmountView: View {
                             .padding()
                             .background(Color.splitInputSurface)
                             .cornerRadius(14)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                focusedField = .usd
+                            }
 
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Sats amount")
@@ -141,6 +145,10 @@ struct ReceiveAmountView: View {
                                         guard focusedField == .sats else { return }
                                         guard !isProgrammaticUpdate else { return }
                                         Task { await updateUsdFromSats() }
+                                    }
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        focusedField = .sats
                                     }
 
                             }
@@ -176,6 +184,10 @@ struct ReceiveAmountView: View {
                                     if descriptionText.count > 80 {
                                         descriptionText = String(descriptionText.prefix(80))
                                     }
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    focusedField = .description
                                 }
 
                             Text("Keep it short. This text is embedded in the invoice and may be visible to the sender.")

@@ -188,7 +188,7 @@ struct LightningConnectionsView: View {
     }
 }
 
-private struct AddLightningWalletView: View {
+struct AddLightningWalletView: View {
     @Environment(\.dismiss) private var dismiss
 
     private let background = Color.splitSoftBackground

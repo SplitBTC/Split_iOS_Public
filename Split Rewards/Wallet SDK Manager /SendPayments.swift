@@ -235,7 +235,7 @@ extension WalletManager {
 
             let previewId = UUID()
             preparedPayments[previewId] = .send(prepareResponse)
-            let bolt11Metadata = bolt11PreviewMetadata(from: inputType)
+            let bolt11Metadata = bolt11PreviewMetadata(from: inputType, paymentRequest: paymentRequest)
 
             return PaymentPreview(
                 id: previewId,
@@ -255,19 +255,24 @@ extension WalletManager {
         }
     }
 
-    private func bolt11PreviewMetadata(from inputType: InputType) -> (
+    private func bolt11PreviewMetadata(from inputType: InputType, paymentRequest: String) -> (
         recipientName: String?,
         destinationPubkey: String?,
         paymentHash: String?
     ) {
+        let localMetadata = NWCBolt11MetadataDecoder.decode(paymentRequest)
         guard case .bolt11Invoice(v1: let invoice) = inputType else {
-            return (nil, nil, nil)
+            return (
+                localMetadata?.description?.nilIfBlank,
+                localMetadata?.destinationPubkey?.nilIfBlank,
+                localMetadata?.paymentHash?.nilIfBlank
+            )
         }
 
         return (
-            invoice.description?.nilIfBlank,
-            invoice.payeePubkey.nilIfBlank,
-            invoice.paymentHash.nilIfBlank
+            invoice.description?.nilIfBlank ?? localMetadata?.description?.nilIfBlank,
+            invoice.payeePubkey.nilIfBlank ?? localMetadata?.destinationPubkey?.nilIfBlank,
+            invoice.paymentHash.nilIfBlank ?? localMetadata?.paymentHash?.nilIfBlank
         )
     }
 
@@ -475,21 +480,39 @@ extension WalletManager {
         paymentHash: String?,
         description: String?
     )? {
-        guard let sdk else { return nil }
+        let localMetadata = NWCBolt11MetadataDecoder.decode(paymentRequest)
+        guard let sdk else {
+            guard let localMetadata else { return nil }
+            return (
+                localMetadata.destinationPubkey?.nilIfBlank,
+                localMetadata.paymentHash?.nilIfBlank,
+                localMetadata.description?.nilIfBlank
+            )
+        }
 
         do {
             let parsed = try await sdk.parse(input: paymentRequest)
             guard case .bolt11Invoice(v1: let invoice) = parsed else {
-                return nil
+                guard let localMetadata else { return nil }
+                return (
+                    localMetadata.destinationPubkey?.nilIfBlank,
+                    localMetadata.paymentHash?.nilIfBlank,
+                    localMetadata.description?.nilIfBlank
+                )
             }
 
             return (
-                invoice.payeePubkey.nilIfBlank,
-                invoice.paymentHash.nilIfBlank,
-                invoice.description?.nilIfBlank
+                invoice.payeePubkey.nilIfBlank ?? localMetadata?.destinationPubkey?.nilIfBlank,
+                invoice.paymentHash.nilIfBlank ?? localMetadata?.paymentHash?.nilIfBlank,
+                invoice.description?.nilIfBlank ?? localMetadata?.description?.nilIfBlank
             )
         } catch {
-            return nil
+            guard let localMetadata else { return nil }
+            return (
+                localMetadata.destinationPubkey?.nilIfBlank,
+                localMetadata.paymentHash?.nilIfBlank,
+                localMetadata.description?.nilIfBlank
+            )
         }
     }
 }

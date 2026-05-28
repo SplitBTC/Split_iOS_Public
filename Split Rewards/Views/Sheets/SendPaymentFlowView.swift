@@ -495,6 +495,12 @@ struct SendPaymentFlowView: View {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .onTapGesture {
+                guard !isAmountLocked else { return }
+                isSendMaxAmount = false
+                focusedField = .amount
+            }
             .disabled(isAmountLocked)
 
             amountUnitToggle
@@ -833,17 +839,14 @@ struct SendPaymentFlowView: View {
         }
 
         do {
-            let response = try await postRewardsCheck(
-                walletManager: walletManager,
-                authManager: authManager,
-                destinationPubkey: destinationPubkey
-            )
+            let response = try await localRewardsCheck(destinationPubkey: destinationPubkey)
 
             return copyPreview(
                 preview,
                 rewardEligible: response.rewardEligible,
                 destinationPubkey: destinationPubkey,
-                paymentHash: rewardsMetadata.paymentHash
+                paymentHash: rewardsMetadata.paymentHash,
+                merchantPubkeyHash: response.merchantPubkeyHash
             )
         } catch {
             print("Rewards check failed: \(error.localizedDescription)")
@@ -858,35 +861,67 @@ struct SendPaymentFlowView: View {
             return (destinationPubkey, preview.paymentHash?.nilIfBlank)
         }
 
+        let localMetadata = NWCBolt11MetadataDecoder.decode(preview.paymentRequest)
+        func mergedMetadata(
+            destinationPubkey: String?,
+            paymentHash: String?
+        ) -> (destinationPubkey: String?, paymentHash: String?) {
+            (
+                destinationPubkey?.nilIfBlank ?? localMetadata?.destinationPubkey?.nilIfBlank,
+                paymentHash?.nilIfBlank ?? localMetadata?.paymentHash?.nilIfBlank
+            )
+        }
+
         switch preview.backend {
         case .spark:
             if let metadata = await walletManager.decodeBolt11InvoiceMetadata(preview.paymentRequest) {
-                return (metadata.destinationPubkey?.nilIfBlank, metadata.paymentHash?.nilIfBlank)
+                return mergedMetadata(
+                    destinationPubkey: metadata.destinationPubkey,
+                    paymentHash: metadata.paymentHash
+                )
             }
         case .sparkSubwallet:
             if let metadata = await sparkSubwalletManager.decodeBolt11InvoiceMetadata(preview.paymentRequest) {
-                return (metadata.destinationPubkey?.nilIfBlank, metadata.paymentHash?.nilIfBlank)
+                return mergedMetadata(
+                    destinationPubkey: metadata.destinationPubkey,
+                    paymentHash: metadata.paymentHash
+                )
             }
         case .lnd:
             if let decoded = try? await lndWalletManager.decodeInvoice(preview.paymentRequest) {
-                return (decoded.destination?.nilIfBlank, decoded.paymentHash?.nilIfBlank)
+                return mergedMetadata(
+                    destinationPubkey: decoded.destination,
+                    paymentHash: decoded.paymentHash
+                )
             }
         case .nwc:
-            if let metadata = NWCBolt11MetadataDecoder.decode(preview.paymentRequest) {
-                return (metadata.destinationPubkey?.nilIfBlank, metadata.paymentHash?.nilIfBlank)
+            if let localMetadata {
+                return (
+                    localMetadata.destinationPubkey?.nilIfBlank,
+                    localMetadata.paymentHash?.nilIfBlank
+                )
             }
         case .coreLightning:
             if let decoded = try? await coreLightningWalletManager.decodeInvoice(preview.paymentRequest) {
-                return (decoded.payee?.nilIfBlank, decoded.paymentHash?.nilIfBlank)
+                return mergedMetadata(
+                    destinationPubkey: decoded.payee,
+                    paymentHash: decoded.paymentHash
+                )
             }
         case .eclair:
             if let decoded = try? await eclairWalletManager.decodeInvoice(preview.paymentRequest) {
-                return (decoded.nodeId?.nilIfBlank, decoded.paymentHash?.nilIfBlank)
+                return mergedMetadata(
+                    destinationPubkey: decoded.nodeId,
+                    paymentHash: decoded.paymentHash
+                )
             }
         }
 
-        if let metadata = NWCBolt11MetadataDecoder.decode(preview.paymentRequest) {
-            return (metadata.destinationPubkey?.nilIfBlank, metadata.paymentHash?.nilIfBlank)
+        if let localMetadata {
+            return (
+                localMetadata.destinationPubkey?.nilIfBlank,
+                localMetadata.paymentHash?.nilIfBlank
+            )
         }
 
         return (nil, preview.paymentHash?.nilIfBlank)
@@ -896,7 +931,8 @@ struct SendPaymentFlowView: View {
         _ preview: WalletManager.PaymentPreview,
         rewardEligible: Bool,
         destinationPubkey: String? = nil,
-        paymentHash: String? = nil
+        paymentHash: String? = nil,
+        merchantPubkeyHash: String? = nil
     ) -> WalletManager.PaymentPreview {
         WalletManager.PaymentPreview(
             id: preview.id,
@@ -910,6 +946,7 @@ struct SendPaymentFlowView: View {
             lndAmountOverrideSats: preview.lndAmountOverrideSats,
             destinationPubkey: destinationPubkey?.nilIfBlank ?? preview.destinationPubkey,
             paymentHash: paymentHash?.nilIfBlank ?? preview.paymentHash,
+            merchantPubkeyHash: merchantPubkeyHash?.nilIfBlank ?? preview.merchantPubkeyHash,
             rewardEligible: rewardEligible
         )
     }

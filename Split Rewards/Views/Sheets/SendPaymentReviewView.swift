@@ -443,7 +443,6 @@ struct SendPaymentReviewView: View {
                 switch result {
                 case .completed:
                     toastManager.showPaymentSuccess(direction: .sent)
-                    postCompletedSparkSubwalletRewardSpend()
 
                 case .pending:
                     break
@@ -526,7 +525,7 @@ struct SendPaymentReviewView: View {
                 await walletManager.refreshBtcUsdRate()
             }
 
-            _ = try await nwcWalletManager.payInvoice(
+            let response = try await nwcWalletManager.payInvoice(
                 preview.paymentRequest,
                 amountSats: preview.lndAmountOverrideSats
             )
@@ -535,7 +534,7 @@ struct SendPaymentReviewView: View {
                 toastManager.showPaymentSuccess(direction: .sent)
             }
 
-            launchNWCPostSendReconciliation()
+            launchNWCPostSendReconciliation(response: response)
         } catch {
             await MainActor.run {
                 toastManager.showPaymentFailure(direction: .sent, subtitle: error.localizedDescription)
@@ -543,7 +542,7 @@ struct SendPaymentReviewView: View {
         }
     }
 
-    private func launchNWCPostSendReconciliation() {
+    private func launchNWCPostSendReconciliation(response: NWCPayInvoiceResult) {
         Task(priority: .utility) {
             do {
                 _ = try await nwcWalletManager.refreshBalance()
@@ -568,7 +567,7 @@ struct SendPaymentReviewView: View {
 
             await MainActor.run {
                 NotificationCenter.default.post(name: .walletTransactionsDidChange, object: nil)
-                postCompletedNWCRewardSpend()
+                postCompletedNWCRewardSpend(response: response)
             }
         }
     }
@@ -681,104 +680,79 @@ struct SendPaymentReviewView: View {
     }
 
     @MainActor
-    private func postCompletedNWCRewardSpend() {
-        postRewardSpend(
-            walletManager: walletManager,
-            authManager: authManager,
-            direction: "sent",
-            usdAmountCents: rewardSpendUSDCents(),
-            btcAmountSats: rewardSpendAmountSats(),
-            destinationPubkey: preview.destinationPubkey?.nilIfBlank,
-            network: "lightning",
-            status: "Completed",
+    private func postCompletedNWCRewardSpend(response: NWCPayInvoiceResult) {
+        guard shouldPostCompletedRewardSpend else { return }
+
+        postCompletedEncryptedRewardSpendClaim(
             paymentHash: preview.paymentHash?.nilIfBlank,
-            onSuccess: { _ in },
-            onError: { [weak walletManager] message in
-                walletManager?.lastErrorMessage = message
-            }
+            preimage: response.preimage?.nilIfBlank
         )
     }
 
     @MainActor
     private func postCompletedLNDRewardSpend(response: LNDPayInvoiceResponse) {
+        guard shouldPostCompletedRewardSpend else { return }
+
         let paymentHash = response.paymentHash?.nilIfBlank ?? preview.paymentHash?.nilIfBlank
 
-        postRewardSpend(
-            walletManager: walletManager,
-            authManager: authManager,
-            direction: "sent",
-            usdAmountCents: rewardSpendUSDCents(),
-            btcAmountSats: rewardSpendAmountSats(),
-            destinationPubkey: preview.destinationPubkey?.nilIfBlank,
-            network: "lightning",
-            status: "Completed",
+        postCompletedEncryptedRewardSpendClaim(
             paymentHash: paymentHash,
-            onSuccess: { _ in },
-            onError: { [weak walletManager] message in
-                walletManager?.lastErrorMessage = message
-            }
+            preimage: response.paymentPreimage?.nilIfBlank
         )
     }
 
     @MainActor
     private func postCompletedCoreLightningRewardSpend(response: CoreLightningPayResponse) {
+        guard shouldPostCompletedRewardSpend else { return }
+
         let paymentHash = response.paymentHash?.nilIfBlank ?? preview.paymentHash?.nilIfBlank
 
-        postRewardSpend(
-            walletManager: walletManager,
-            authManager: authManager,
-            direction: "sent",
-            usdAmountCents: rewardSpendUSDCents(),
-            btcAmountSats: rewardSpendAmountSats(),
-            destinationPubkey: preview.destinationPubkey?.nilIfBlank,
-            network: "lightning",
-            status: "Completed",
+        postCompletedEncryptedRewardSpendClaim(
             paymentHash: paymentHash,
-            onSuccess: { _ in },
-            onError: { [weak walletManager] message in
-                walletManager?.lastErrorMessage = message
-            }
+            preimage: response.paymentPreimage?.nilIfBlank
         )
     }
 
     @MainActor
     private func postCompletedEclairRewardSpend(response: EclairPayResponse) {
-        let paymentHash = response.paymentHash?.nilIfBlank ?? preview.paymentHash?.nilIfBlank
+        guard shouldPostCompletedRewardSpend else { return }
 
-        postRewardSpend(
-            walletManager: walletManager,
-            authManager: authManager,
-            direction: "sent",
-            usdAmountCents: rewardSpendUSDCents(),
-            btcAmountSats: rewardSpendAmountSats(),
-            destinationPubkey: preview.destinationPubkey?.nilIfBlank,
-            network: "lightning",
-            status: "Completed",
+        let paymentHash = response.paymentHash?.nilIfBlank ?? preview.paymentHash?.nilIfBlank
+        let preimage = response.paymentPreimage?.nilIfBlank ?? response.status?.paymentPreimage?.nilIfBlank
+
+        postCompletedEncryptedRewardSpendClaim(
             paymentHash: paymentHash,
-            onSuccess: { _ in },
-            onError: { [weak walletManager] message in
-                walletManager?.lastErrorMessage = message
-            }
+            preimage: preimage
         )
     }
 
     @MainActor
-    private func postCompletedSparkSubwalletRewardSpend() {
-        postRewardSpend(
+    private func postCompletedEncryptedRewardSpendClaim(paymentHash: String?, preimage: String?) {
+        guard shouldPostCompletedRewardSpend else { return }
+
+        postEncryptedRewardSpendClaim(
             walletManager: walletManager,
             authManager: authManager,
-            direction: "sent",
-            usdAmountCents: rewardSpendUSDCents(),
+            merchantPubkeyHash: preview.merchantPubkeyHash?.nilIfBlank,
+            paymentHash: paymentHash,
+            preimage: preimage,
             btcAmountSats: rewardSpendAmountSats(),
-            destinationPubkey: preview.destinationPubkey?.nilIfBlank,
-            network: "lightning",
-            status: "Completed",
-            paymentHash: preview.paymentHash?.nilIfBlank,
+            usdAmountCents: rewardSpendUSDCents(),
+            invoice: preview.paymentRequest,
             onSuccess: { _ in },
-            onError: { [weak walletManager] message in
+            onError: { [weak walletManager, weak toastManager] message in
                 walletManager?.lastErrorMessage = message
+                toastManager?.showInfo(
+                    title: "Payment sent",
+                    subtitle: "Reward could not be credited. \(message)",
+                    duration: 5.0
+                )
             }
         )
+    }
+
+    private var shouldPostCompletedRewardSpend: Bool {
+        preview.rewardEligible == true
     }
 
     private func rewardSpendUSDCents() -> Int {

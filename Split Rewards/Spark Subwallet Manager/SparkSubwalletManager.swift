@@ -36,6 +36,8 @@ final class SparkSubwalletManager: ObservableObject {
     @Published var pendingSeedWords: [String] = []
 
     var toastManager: ToastManager?
+    weak var walletManager: WalletManager?
+    weak var authManager: AuthManager?
 
     private let store: SparkSubwalletStore
     private var sdk: BreezSdk?
@@ -43,11 +45,17 @@ final class SparkSubwalletManager: ObservableObject {
     private var eventListenerId: String?
     private var eventListenerWalletId: String?
     private var preparedPayments: [UUID: PreparedPayment] = [:]
+    private var processedRewardPaymentIds: Set<String> = []
     private var refreshTask: Task<Void, Never>?
     private let refreshDebounceNanos: UInt64 = 300_000_000
 
     init(store: SparkSubwalletStore = .shared) {
         self.store = store
+    }
+
+    func configure(walletManager: WalletManager, authManager: AuthManager) {
+        self.walletManager = walletManager
+        self.authManager = authManager
     }
 
     var isConnected: Bool {
@@ -209,19 +217,31 @@ final class SparkSubwalletManager: ObservableObject {
         paymentHash: String?,
         description: String?
     )? {
+        let localMetadata = NWCBolt11MetadataDecoder.decode(paymentRequest)
+
         do {
             let parsed = try await requireSdk().parse(input: paymentRequest)
             guard case .bolt11Invoice(v1: let invoice) = parsed else {
-                return nil
+                guard let localMetadata else { return nil }
+                return (
+                    localMetadata.destinationPubkey?.nilIfBlank,
+                    localMetadata.paymentHash?.nilIfBlank,
+                    localMetadata.description?.nilIfBlank
+                )
             }
 
             return (
-                invoice.payeePubkey.nilIfBlank,
-                invoice.paymentHash.nilIfBlank,
-                invoice.description?.nilIfBlank
+                invoice.payeePubkey.nilIfBlank ?? localMetadata?.destinationPubkey?.nilIfBlank,
+                invoice.paymentHash.nilIfBlank ?? localMetadata?.paymentHash?.nilIfBlank,
+                invoice.description?.nilIfBlank ?? localMetadata?.description?.nilIfBlank
             )
         } catch {
-            return nil
+            guard let localMetadata else { return nil }
+            return (
+                localMetadata.destinationPubkey?.nilIfBlank,
+                localMetadata.paymentHash?.nilIfBlank,
+                localMetadata.description?.nilIfBlank
+            )
         }
     }
 
@@ -293,7 +313,7 @@ final class SparkSubwalletManager: ObservableObject {
             )
             let previewId = UUID()
             preparedPayments[previewId] = .send(prepareResponse)
-            let bolt11Metadata = bolt11PreviewMetadata(from: inputType)
+            let bolt11Metadata = bolt11PreviewMetadata(from: inputType, paymentRequest: paymentRequest)
 
             return WalletManager.PaymentPreview(
                 id: previewId,
@@ -354,6 +374,73 @@ final class SparkSubwalletManager: ObservableObject {
             lastErrorMessage = "Payment failed: \(error.localizedDescription)"
             return .failed
         }
+    }
+
+    func handleSdkEvent(_ event: SdkEvent) async {
+        switch event {
+        case .paymentSucceeded(let payment):
+            await handleSucceededPaymentEvent(payment)
+            scheduleRefresh()
+
+        case .paymentPending,
+             .paymentFailed,
+             .claimedDeposits,
+             .unclaimedDeposits,
+             .synced:
+            scheduleRefresh()
+
+        default:
+            break
+        }
+    }
+
+    private func handleSucceededPaymentEvent(_ payment: Payment) async {
+        guard payment.paymentType == .send else { return }
+
+        let dedupeKey = payment.id
+        guard !processedRewardPaymentIds.contains(dedupeKey) else { return }
+        processedRewardPaymentIds.insert(dedupeKey)
+
+        let methodDescription = String(describing: payment.method).lowercased()
+        guard methodDescription.contains("lightning") else { return }
+
+        let btcAmountSats = Int(payment.amount)
+        var usdAmountCents = 0
+        if let rate = walletManager?.btcUsdRate {
+            let usd = (Double(btcAmountSats) / 100_000_000.0) * rate
+            usdAmountCents = Int((usd * 100).rounded())
+        }
+
+        let proof = rewardClaimProof(from: payment)
+
+        guard let destinationPubkey = proof?.destinationPubkey,
+              let walletManager,
+              let authManager else {
+            return
+        }
+
+        let rewardsCheck = try? await localRewardsCheck(destinationPubkey: destinationPubkey)
+        guard rewardsCheck?.rewardEligible == true else { return }
+
+        postEncryptedRewardSpendClaim(
+            walletManager: walletManager,
+            authManager: authManager,
+            merchantPubkeyHash: rewardsCheck?.merchantPubkeyHash,
+            paymentHash: proof?.paymentHash,
+            preimage: proof?.preimage,
+            btcAmountSats: btcAmountSats,
+            usdAmountCents: usdAmountCents,
+            invoice: proof?.invoice ?? "",
+            onSuccess: { _ in },
+            onError: { [weak self] message in
+                self?.lastErrorMessage = message
+                self?.toastManager?.showInfo(
+                    title: "Payment sent",
+                    subtitle: "Reward could not be credited. \(message)",
+                    duration: 5.0
+                )
+            }
+        )
     }
 
     func fetchTransactionRows(mapper: WalletManager, maxCount: UInt32 = 100) async throws -> [WalletManager.TransactionRow] {
@@ -553,19 +640,24 @@ final class SparkSubwalletManager: ObservableObject {
         }
     }
 
-    private func bolt11PreviewMetadata(from inputType: InputType) -> (
+    private func bolt11PreviewMetadata(from inputType: InputType, paymentRequest: String) -> (
         recipientName: String?,
         destinationPubkey: String?,
         paymentHash: String?
     ) {
+        let localMetadata = NWCBolt11MetadataDecoder.decode(paymentRequest)
         guard case .bolt11Invoice(v1: let invoice) = inputType else {
-            return (nil, nil, nil)
+            return (
+                localMetadata?.description?.nilIfBlank,
+                localMetadata?.destinationPubkey?.nilIfBlank,
+                localMetadata?.paymentHash?.nilIfBlank
+            )
         }
 
         return (
-            invoice.description?.nilIfBlank,
-            invoice.payeePubkey.nilIfBlank,
-            invoice.paymentHash.nilIfBlank
+            invoice.description?.nilIfBlank ?? localMetadata?.description?.nilIfBlank,
+            invoice.payeePubkey.nilIfBlank ?? localMetadata?.destinationPubkey?.nilIfBlank,
+            invoice.paymentHash.nilIfBlank ?? localMetadata?.paymentHash?.nilIfBlank
         )
     }
 

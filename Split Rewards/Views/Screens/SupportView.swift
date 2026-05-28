@@ -17,7 +17,7 @@ struct SupportView: View {
     private let accentBlue = Color.splitBrandBlue
     private let accentPink = Color.splitBrandPink
     private let supportLightningAddress = "support@example.com"
-    private let supportDisplayName = "Taylor"
+    private let supportDisplayName = "Support"
 
     @State private var showComposeSheet = false
     @State private var pendingThreadAfterCompose: ActiveThreadDestination?
@@ -151,7 +151,7 @@ struct SupportView: View {
                 Image(systemName: "message.fill")
                     .font(.headline.weight(.semibold))
 
-                Text(existingSupportThread == nil ? "Message Taylor" : "Open Support Chat")
+                Text(existingSupportThread == nil ? "Message Support" : "Open Support Chat")
                     .font(.headline.weight(.semibold))
 
                 Spacer()

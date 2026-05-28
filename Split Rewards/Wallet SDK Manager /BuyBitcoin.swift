@@ -9,7 +9,10 @@ extension WalletManager {
             throw WalletError.sdkNotInitialized
         }
 
-        let normalizedAmountSats = amountSats.flatMap { $0 > 0 ? $0 : nil }
+        guard let normalizedAmountSats = amountSats.flatMap({ $0 > 0 ? $0 : nil }) else {
+            throw WalletError.invalidAmount
+        }
+
         let response = try await sdk.buyBitcoin(
             request: .cashApp(amountSats: normalizedAmountSats)
         )

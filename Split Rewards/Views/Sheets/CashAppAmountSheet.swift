@@ -197,6 +197,10 @@ struct CashAppAmountSheet: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(hairline, lineWidth: 1)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .onTapGesture {
+            amountFieldFocused = true
+        }
     }
 
     private var unitSelector: some View {

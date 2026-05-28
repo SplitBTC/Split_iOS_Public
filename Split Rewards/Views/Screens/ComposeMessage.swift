@@ -36,7 +36,7 @@ struct ComposeMessage: View {
     private let composerSurface = Color.white.opacity(0.08)
     private let bottomBarSurface = Color.splitCardSurface
     private let separator = Color.white.opacity(0.08)
-    private let lightningDomainSuffix = "@\(AppConfig.lightningAddressDomain)"
+    private var lightningDomainSuffix: String { "@\(AppConfig.lightningAddressDomain)" }
 
     let onSent: ((MessageSendResult) -> Void)?
 

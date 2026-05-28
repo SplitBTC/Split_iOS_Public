@@ -25,6 +25,7 @@ final class WalletManager: ObservableObject {
     enum WalletError: Error, LocalizedError {
         case sdkNotInitialized
         case invalidSeedPhrase
+        case invalidAmount
 
         var errorDescription: String? {
             switch self {
@@ -32,6 +33,8 @@ final class WalletManager: ObservableObject {
                 return "Wallet not initialized."
             case .invalidSeedPhrase:
                 return "Invalid seed phrase."
+            case .invalidAmount:
+                return "Enter an amount in sats."
             }
         }
     }
@@ -79,7 +82,10 @@ final class WalletManager: ObservableObject {
         /// Lightning payment hash, when the active wallet can expose it before send.
         let paymentHash: String?
 
-        /// Whether the backend matched the Lightning destination pubkey to a rewards merchant.
+        /// Hash of the matched merchant pubkey from the public rewards merchant list.
+        let merchantPubkeyHash: String?
+
+        /// Whether the Lightning destination pubkey matched the local rewards merchant hash list.
         let rewardEligible: Bool?
 
         init(
@@ -94,6 +100,7 @@ final class WalletManager: ObservableObject {
             lndAmountOverrideSats: Int64? = nil,
             destinationPubkey: String? = nil,
             paymentHash: String? = nil,
+            merchantPubkeyHash: String? = nil,
             rewardEligible: Bool? = nil
         ) {
             self.id = id
@@ -107,6 +114,7 @@ final class WalletManager: ObservableObject {
             self.lndAmountOverrideSats = lndAmountOverrideSats
             self.destinationPubkey = destinationPubkey
             self.paymentHash = paymentHash
+            self.merchantPubkeyHash = merchantPubkeyHash
             self.rewardEligible = rewardEligible
         }
     }

@@ -41,7 +41,7 @@ struct UnifiedWalletSurface: View {
     @State private var showReceiveFlow = false
     @State private var showBuyBitcoinInfo = false
     @State private var showWalletPicker = false
-    @State private var showLightningConnections = false
+    @State private var showAddLightningWallet = false
     @StateObject private var transactionActivityTracker = TransactionActivityTracker.shared
     @State private var displayedUnseenTransactionCount = 0
     @AppStorage("split.walletBalanceHidden.v1") private var isWalletBalanceHidden = false
@@ -88,7 +88,7 @@ struct UnifiedWalletSurface: View {
                 onSelectExternal: selectExternalWallet,
                 onAddWallet: {
                     showWalletPicker = false
-                    showLightningConnections = true
+                    showAddLightningWallet = true
                 }
             )
             .presentationDetents([.fraction(0.74)])
@@ -111,21 +111,11 @@ struct UnifiedWalletSurface: View {
                 ReceiveAmountView()
             }
         }
-        .fullScreenCover(isPresented: $showLightningConnections) {
+        .fullScreenCover(isPresented: $showAddLightningWallet) {
             NavigationStack {
-                LightningConnectionsView()
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                showLightningConnections = false
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.headline.weight(.bold))
-                                    .foregroundColor(.white)
-                            }
-                            .accessibilityLabel("Close")
-                        }
-                    }
+                AddLightningWalletView(onWalletAdded: {
+                    showAddLightningWallet = false
+                })
             }
         }
         .task {
@@ -158,7 +148,7 @@ struct UnifiedWalletSurface: View {
     private var balanceHero: some View {
         ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: 12) {
-                if hasExternalSpendWallet {
+                if hasExternalSpendWallet || showsRootOnlyAddWalletButton {
                     Color.clear
                         .frame(height: 20)
                 }
@@ -219,6 +209,10 @@ struct UnifiedWalletSurface: View {
 
                     activeWalletButton
                 }
+                    .padding(.top, -4)
+                    .padding(.trailing, -4)
+            } else if showsRootOnlyAddWalletButton {
+                rootOnlyAddWalletButton
                     .padding(.top, -4)
                     .padding(.trailing, -4)
             }
@@ -357,6 +351,10 @@ struct UnifiedWalletSurface: View {
         hasStoredNode || hasStoredNWCWallet || hasStoredCoreLightningNode || hasStoredEclairNode || hasStoredSparkSubwallet
     }
 
+    private var showsRootOnlyAddWalletButton: Bool {
+        !hasExternalSpendWallet && ExternalWalletStore.shared.loadWallets().isEmpty
+    }
+
     private var activeSelectedWalletUsesTor: Bool {
         switch activeSpendWalletStore.activeWallet {
         case .spark:
@@ -385,6 +383,20 @@ struct UnifiedWalletSurface: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Active wallet")
+    }
+
+    private var rootOnlyAddWalletButton: some View {
+        Button {
+            showAddLightningWallet = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 30, height: 30)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add wallet")
     }
 
     private var torStartupStatus: some View {

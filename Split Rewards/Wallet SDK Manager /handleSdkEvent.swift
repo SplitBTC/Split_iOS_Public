@@ -68,12 +68,6 @@ extension WalletManager {
         }
     }
 
-    private func normalizedRewardPaymentHash(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
     // MARK: - Top-level event handler
 
     /// Top-level handler for Breez `SdkEvent`s.
@@ -137,20 +131,7 @@ extension WalletManager {
                 usdAmountCents = Int((usd * 100).rounded())
             }
 
-            var destinationPubkey: String?
-            var paymentHash: String?
-            if case let .lightning(
-                description: _,
-                invoice: _,
-                destinationPubkey: destinationPubkeyValue,
-                htlcDetails: htlcDetails,
-                lnurlPayInfo: _,
-                lnurlWithdrawInfo: _,
-                lnurlReceiveMetadata: _
-            ) = payment.details {
-                destinationPubkey = destinationPubkeyValue
-                paymentHash = normalizedRewardPaymentHash(htlcDetails.paymentHash)
-            }
+            let rewardProof = rewardClaimProof(from: payment)
 
             let dedupeKey = payment.id
             guard !processedPaymentIds.contains(dedupeKey) else {
@@ -180,22 +161,31 @@ extension WalletManager {
                 network = "lightning"
             }
 
-            if direction == "sent", network == "lightning" {
-                postRewardSpend(
-                    walletManager: self,
-                    authManager: authManager,
-                    direction: direction,
-                    usdAmountCents: usdAmountCents,
-                    btcAmountSats: btcAmountSats,              // NEW
-                    destinationPubkey: destinationPubkey,
-                    network: network,
-                    status: "Completed",
-                    paymentHash: paymentHash,
-                    onSuccess: { _ in },
-                    onError: { [weak self] message in
-                        self?.lastErrorMessage = message
-                    }
-                )
+            if direction == "sent",
+               network == "lightning",
+               let destinationPubkey = rewardProof?.destinationPubkey {
+                let rewardsCheck = try? await localRewardsCheck(destinationPubkey: destinationPubkey)
+                if rewardsCheck?.rewardEligible == true {
+                    postEncryptedRewardSpendClaim(
+                        walletManager: self,
+                        authManager: authManager,
+                        merchantPubkeyHash: rewardsCheck?.merchantPubkeyHash,
+                        paymentHash: rewardProof?.paymentHash,
+                        preimage: rewardProof?.preimage,
+                        btcAmountSats: btcAmountSats,
+                        usdAmountCents: usdAmountCents,
+                        invoice: rewardProof?.invoice ?? "",
+                        onSuccess: { _ in },
+                        onError: { [weak self] message in
+                            self?.lastErrorMessage = message
+                            self?.toastManager?.showInfo(
+                                title: "Payment sent",
+                                subtitle: "Reward could not be credited. \(message)",
+                                duration: 5.0
+                            )
+                        }
+                    )
+                }
             }
 
         default:

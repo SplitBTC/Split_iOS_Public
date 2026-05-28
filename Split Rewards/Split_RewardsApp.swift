@@ -121,6 +121,10 @@ struct Split_RewardsApp: App {
                     walletManager.toastManager = toastManager
                     lndWalletManager.toastManager = toastManager
                     sparkSubwalletManager.toastManager = toastManager
+                    sparkSubwalletManager.configure(
+                        walletManager: walletManager,
+                        authManager: authManager
+                    )
 
                     // ✅ FIX: authManager now exists in this scope
                     await walletManager.configure(authManager: authManager)
@@ -182,6 +186,10 @@ struct Split_RewardsApp: App {
                 walletManager.toastManager = toastManager
                 lndWalletManager.toastManager = toastManager
                 sparkSubwalletManager.toastManager = toastManager
+                sparkSubwalletManager.configure(
+                    walletManager: walletManager,
+                    authManager: authManager
+                )
                 MessagingDeviceTokenManager.shared.configure(
                     authManager: authManager,
                     walletManager: walletManager
