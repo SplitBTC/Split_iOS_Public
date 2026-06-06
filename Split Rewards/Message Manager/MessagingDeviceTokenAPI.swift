@@ -9,13 +9,17 @@ import Foundation
 
 struct MessagingDeviceRegistrationRecord: Decodable {
     let registrationId: String?
+    let messagingAccountId: String?
     let walletPubkey: String?
     let messagingPubkey: String?
     let deviceToken: String?
     let platform: String?
     let environment: String?
+    let appVersion: String?
+    let bundleId: String?
     let registrationSignedAt: Date?
     let lastSeenAt: Date?
+    let createdAt: Date?
     let updatedAt: Date?
 }
 
@@ -64,7 +68,7 @@ enum MessagingDeviceTokenAPI {
 
         try await authManager.ensureSession(walletManager: walletManager)
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v3/device-registrations") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/device-registrations") else {
             throw URLError(.badURL)
         }
 
@@ -72,8 +76,9 @@ enum MessagingDeviceTokenAPI {
             walletManager: walletManager
         )
         let signedAt = Int(Date().timeIntervalSince1970)
-        let canonicalMessage = MessageKeyBindingVerifier.buildMessagingDeviceRegistrationMessage(
-            version: 1,
+        let signatureVersion = 2
+        let canonicalMessage = MessageKeyBindingVerifier.buildMessagingDeviceRegistrationMessageV4(
+            version: signatureVersion,
             walletPubkey: walletPubkey,
             messagingPubkey: messagingPubkey,
             platform: "apns",
@@ -101,7 +106,13 @@ enum MessagingDeviceTokenAPI {
             let registrationSignature: String
             let registrationSignatureVersion: Int
             let registrationSignedAt: Int
+            let appVersion: String?
+            let bundleId: String?
         }
+
+        let bundle = Bundle.main
+        let appVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let bundleId = bundle.bundleIdentifier
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -116,8 +127,10 @@ enum MessagingDeviceTokenAPI {
                 environment: AppConfig.messagingPushEnvironment,
                 deviceToken: deviceToken,
                 registrationSignature: signed.signature,
-                registrationSignatureVersion: 1,
-                registrationSignedAt: signedAt
+                registrationSignatureVersion: signatureVersion,
+                registrationSignedAt: signedAt,
+                appVersion: appVersion,
+                bundleId: bundleId
             )
         )
 

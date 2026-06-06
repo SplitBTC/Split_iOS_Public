@@ -446,7 +446,7 @@ final class MessageStore: ObservableObject {
 
         try persist(updatedMessages)
         messages = updatedMessages
-        syncApplicationBadge(for: updatedMessages)
+        syncApplicationBadge(for: updatedMessages, allowLoweringWhileInactive: true)
     }
 
     func clearAll() {
@@ -614,9 +614,13 @@ final class MessageStore: ObservableObject {
         return normalized.isEmpty ? nil : normalized
     }
 
-    private func syncApplicationBadge(for messages: [StoredMessage]) {
+    private func syncApplicationBadge(
+        for messages: [StoredMessage],
+        allowLoweringWhileInactive: Bool = false
+    ) {
         MessagingNotificationBadgeManager.shared.syncUnreadMessageCount(
-            messages.filter { $0.isIncoming && !$0.isRead }.count
+            messages.filter { $0.isIncoming && !$0.isRead }.count,
+            allowLoweringWhileInactive: allowLoweringWhileInactive
         )
     }
 }

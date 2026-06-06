@@ -9,7 +9,7 @@ import Foundation
 
 struct MessagingAttachmentRecord: Decodable {
     let attachmentId: String
-    let recipientLightningAddress: String
+    let recipientLightningAddress: String?
     let sizeBytes: Int
     let uploadContentType: String
     let status: String
@@ -109,7 +109,7 @@ enum MessageAttachmentUploadAPI {
             throw MessageAttachmentUploadError.emptyFileData
         }
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v2/attachments/upload") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/attachments/upload") else {
             throw MessageAttachmentUploadError.invalidURL
         }
 
@@ -126,7 +126,7 @@ enum MessageAttachmentUploadAPI {
             fileData: fileData,
             fileName: fileName,
             mimeType: mimeType,
-            recipient: recipient.identityBindingPayload,
+            recipient: try requireRecipientBindingV4(recipient),
             boundary: boundary
         )
 
@@ -141,7 +141,7 @@ enum MessageAttachmentUploadAPI {
                 fileData: fileData,
                 fileName: fileName,
                 mimeType: mimeType,
-                recipient: recipient.identityBindingPayload,
+                recipient: try requireRecipientBindingV4(recipient),
                 boundary: boundary
             )
 
@@ -190,7 +190,7 @@ enum MessageAttachmentUploadAPI {
         fileData: Data,
         fileName: String,
         mimeType: String,
-        recipient: MessagingIdentityBindingPayload,
+        recipient: MessagingIdentityBindingPayloadV4,
         boundary: String
     ) -> Data {
         var body = Data()
@@ -201,8 +201,13 @@ enum MessageAttachmentUploadAPI {
         body.append("\r\n")
 
         body.append("--\(boundary)\r\n")
-        body.append("Content-Disposition: form-data; name=\"lightningAddress\"\r\n\r\n")
-        body.append(recipient.lightningAddress)
+        body.append("Content-Disposition: form-data; name=\"lightningAddressHash\"\r\n\r\n")
+        body.append(recipient.lightningAddressHash)
+        body.append("\r\n")
+
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"lightningAddressHashScheme\"\r\n\r\n")
+        body.append(recipient.lightningAddressHashScheme)
         body.append("\r\n")
 
         body.append("--\(boundary)\r\n")
@@ -234,6 +239,16 @@ enum MessageAttachmentUploadAPI {
 
         return body
     }
+
+    private static func requireRecipientBindingV4(
+        _ recipient: MessagingRecipient
+    ) throws -> MessagingIdentityBindingPayloadV4 {
+        guard let binding = recipient.identityBindingPayloadV4 else {
+            throw MessageKeyManager.MessageKeyError.invalidResponse
+        }
+
+        return binding
+    }
 }
 
 enum MessageAttachmentDownloadAPI {
@@ -243,7 +258,7 @@ enum MessageAttachmentDownloadAPI {
         authManager: AuthManager,
         walletManager: WalletManager
     ) async throws -> Data {
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/attachments/\(attachmentId)/download") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/attachments/\(attachmentId)/download") else {
             throw MessageAttachmentDownloadError.invalidURL
         }
 
@@ -285,7 +300,7 @@ enum MessageAttachmentReceiptAPI {
         authManager: AuthManager,
         walletManager: WalletManager
     ) async throws {
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/attachments/mark-received") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/attachments/mark-received") else {
             throw MessageAttachmentReceiptError.invalidURL
         }
 

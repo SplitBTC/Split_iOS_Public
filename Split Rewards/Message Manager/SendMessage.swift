@@ -9,7 +9,7 @@ import Foundation
 
 struct SendMessageEnvelope {
     let clientMessageId: String
-    let recipient: MessagingIdentityBindingPayload
+    let recipient: MessagingIdentityBindingPayloadV4
     let ciphertext: String
     let nonce: String
     let senderEphemeralPubkey: String
@@ -29,9 +29,10 @@ struct SendMessageResponse: Decodable {
 struct SentRelayMessage: Decodable {
     let messageId: String
     let clientMessageId: String
-    let recipientWalletPubkey: String
+    let recipientWalletPubkey: String?
+    let recipientMessagingAccountId: String?
     let recipientMessagingPubkey: String
-    let recipientLightningAddress: String
+    let recipientLightningAddress: String?
     let status: String
     let createdAt: Date?
     let createdAtClient: Date?
@@ -85,13 +86,13 @@ enum SendMessageAPI {
     ) async throws -> SendMessageResponse {
         try await authManager.ensureSession(walletManager: walletManager)
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v3/send") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/send") else {
             throw URLError(.badURL)
         }
 
         struct RequestBody: Encodable {
             let clientMessageId: String
-            let recipient: MessagingIdentityBindingPayload
+            let recipient: MessagingIdentityBindingPayloadV4
             let ciphertext: String
             let nonce: String
             let senderEphemeralPubkey: String
@@ -435,17 +436,22 @@ enum MessagingSendCoordinator {
     private static func ensureMessagingBinding(
         authManager: AuthManager,
         walletManager: WalletManager
-    ) async throws -> MessagingIdentityBindingPayload {
+    ) async throws -> SenderMessagingBindingV4 {
         let registration = try await MessageKeyManager.shared.ensureRegistered(
             authManager: authManager,
             walletManager: walletManager
         )
 
-        guard let binding = registration.identityBindingPayload else {
+        guard let binding = registration.identityBindingPayloadV4,
+              let rawLightningAddress = try await MessageKeyManager.shared
+                .fetchLocalLightningAddressForV4Send(walletManager: walletManager) else {
             throw MessageKeyManager.MessageKeyError.invalidResponse
         }
 
-        return binding
+        return SenderMessagingBindingV4(
+            binding: binding,
+            rawLightningAddress: rawLightningAddress
+        )
     }
 
     @MainActor
@@ -463,7 +469,7 @@ enum MessagingSendCoordinator {
 
     @MainActor
     private static func sendResolvedMessage(
-        senderBinding: MessagingIdentityBindingPayload,
+        senderBinding: SenderMessagingBindingV4,
         recipient: MessagingRecipient,
         plaintext: String,
         messageType: String,
@@ -531,8 +537,8 @@ enum MessagingSendCoordinator {
             isIncoming: false,
             isRead: true,
             senderWalletPubkey: senderBinding.walletPubkey,
-            senderMessagingPubkey: senderBinding.messagingPubkey,
-            senderLightningAddress: senderBinding.lightningAddress,
+            senderMessagingPubkey: senderBinding.binding.messagingPubkey,
+            senderLightningAddress: senderBinding.rawLightningAddress,
             recipientWalletPubkey: currentRecipient.walletPubkey,
             recipientMessagingPubkey: currentRecipient.messagingPubkey,
             recipientLightningAddress: currentRecipient.lightningAddress,
@@ -552,7 +558,7 @@ enum MessagingSendCoordinator {
 
     @MainActor
     private static func sendEnvelope(
-        senderBinding: MessagingIdentityBindingPayload,
+        senderBinding: SenderMessagingBindingV4,
         recipient: MessagingRecipient,
         plaintext: String,
         clientMessageId: String,
@@ -570,7 +576,7 @@ enum MessagingSendCoordinator {
                 senderBinding: senderBinding,
                 recipient: recipient,
                 createdAtClientMs: createdAtClientMs,
-                envelopeVersion: 3,
+                envelopeVersion: 4,
                 clientMessageId: clientMessageId,
                 walletManager: walletManager
             ),
@@ -580,12 +586,12 @@ enum MessagingSendCoordinator {
         return try await SendMessageAPI.send(
             envelope: SendMessageEnvelope(
                 clientMessageId: clientMessageId,
-                recipient: recipient.identityBindingPayload,
+                recipient: try requireRecipientBindingV4(recipient),
                 ciphertext: encryptedPayload.ciphertext,
                 nonce: encryptedPayload.nonce,
                 senderEphemeralPubkey: encryptedPayload.senderEphemeralPubkey,
                 createdAtClientMs: createdAtClientMs,
-                envelopeVersion: encryptedPayload.envelopeVersion,
+                envelopeVersion: 4,
                 messageType: messageType,
                 attachmentIds: attachmentIds,
                 sameKeyRetryCount: sameKeyRetryCount
@@ -599,35 +605,35 @@ enum MessagingSendCoordinator {
     private static func buildSealedSenderPayloadString(
         plaintext: String,
         messageType: String,
-        senderBinding: MessagingIdentityBindingPayload,
+        senderBinding: SenderMessagingBindingV4,
         recipient: MessagingRecipient,
         createdAtClientMs: Int64,
         envelopeVersion: Int,
         clientMessageId: String,
         walletManager: WalletManager
     ) async throws -> String {
-        let messageSignatureVersion = 2
-        let canonicalEnvelopeMessage = MessageKeyBindingVerifier.buildMessagingEnvelopeSignatureMessage(
+        let recipientBinding = try requireRecipientBindingV4(recipient)
+        let messageSignatureVersion = 3
+        let canonicalEnvelopeMessage = MessageKeyBindingVerifier.buildMessagingEnvelopeSignatureMessageV4(
             version: messageSignatureVersion,
             clientMessageId: clientMessageId,
-            senderBinding: senderBinding,
-            recipientWalletPubkey: recipient.walletPubkey,
-            recipientLightningAddress: recipient.lightningAddress,
-            recipientMessagingPubkey: recipient.messagingPubkey,
+            senderBinding: senderBinding.binding,
+            recipientBinding: recipientBinding,
             messageType: messageType,
             plaintext: plaintext,
             createdAtClientMs: createdAtClientMs,
             envelopeVersion: envelopeVersion
         )
-        let signingCertificate = try await MessageKeyManager.shared.currentMessageSigningCertificate(
-            senderBinding: senderBinding,
+        let signingCertificate = try await MessageKeyManager.shared.currentMessageSigningCertificateV4(
+            senderBinding: senderBinding.binding,
             walletManager: walletManager
         )
         let messageSignature = try MessageKeyManager.shared.signMessageEnvelope(canonicalEnvelopeMessage)
 
-        let sealedPayload = SealedSenderMessagePayload(
+        let sealedPayload = SealedSenderMessagePayloadV4(
             body: plaintext,
-            sender: senderBinding,
+            sender: senderBinding.binding,
+            senderLightningAddress: senderBinding.rawLightningAddress,
             messagingSigningPubkey: signingCertificate.messagingSigningPubkey,
             messagingSigningPubkeySignature: signingCertificate.messagingSigningPubkeySignature,
             messagingSigningPubkeySignatureVersion: signingCertificate.messagingSigningPubkeySignatureVersion,
@@ -641,4 +647,21 @@ enum MessagingSendCoordinator {
         }
         return sealedPayloadString
     }
+
+    private static func requireRecipientBindingV4(
+        _ recipient: MessagingRecipient
+    ) throws -> MessagingIdentityBindingPayloadV4 {
+        guard let binding = recipient.identityBindingPayloadV4 else {
+            throw MessageKeyManager.MessageKeyError.invalidResponse
+        }
+
+        return binding
+    }
+}
+
+private struct SenderMessagingBindingV4 {
+    let binding: MessagingIdentityBindingPayloadV4
+    let rawLightningAddress: String
+
+    var walletPubkey: String { binding.walletPubkey }
 }

@@ -9,9 +9,53 @@ import Foundation
 import CryptoKit
 import secp256k1
 
+enum MessagingPrivacyV4 {
+    static let lightningAddressClientHashScheme = "split-ln-address-sha256-v1"
+    private static let lightningAddressClientHashPrefix = "split:messaging-ln:v1:"
+
+    enum PrivacyError: LocalizedError {
+        case invalidLightningAddress
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidLightningAddress:
+                return "The Lightning address is invalid."
+            }
+        }
+    }
+
+    static func normalizeLightningAddress(_ value: String) throws -> String {
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard normalized.contains("@"), !normalized.isEmpty else {
+            throw PrivacyError.invalidLightningAddress
+        }
+
+        return normalized
+    }
+
+    static func lightningAddressClientHash(for lightningAddress: String) throws -> String {
+        let normalized = try normalizeLightningAddress(lightningAddress)
+        let digest = SHA256.hash(data: Data("\(lightningAddressClientHashPrefix)\(normalized)".utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
 struct MessagingIdentityBindingPayload: Codable, Hashable {
     let walletPubkey: String
     let lightningAddress: String
+    let messagingPubkey: String
+    let messagingIdentitySignature: String
+    let messagingIdentitySignatureVersion: Int
+    let messagingIdentitySignedAt: Int
+}
+
+struct MessagingIdentityBindingPayloadV4: Codable, Hashable {
+    let walletPubkey: String
+    let lightningAddressHash: String
+    let lightningAddressHashScheme: String
     let messagingPubkey: String
     let messagingIdentitySignature: String
     let messagingIdentitySignatureVersion: Int
@@ -38,8 +82,18 @@ enum MessageRecipientTrustStore {
     }
 
     static func enforceOrPin(_ binding: MessagingIdentityBindingPayload) throws {
-        let normalizedLightningAddress = try normalizeLightningAddress(binding.lightningAddress)
-        let normalizedWalletPubkey = binding.walletPubkey
+        try enforceOrPin(
+            lightningAddress: binding.lightningAddress,
+            walletPubkey: binding.walletPubkey
+        )
+    }
+
+    static func enforceOrPin(
+        lightningAddress: String,
+        walletPubkey: String
+    ) throws {
+        let normalizedLightningAddress = try normalizeLightningAddress(lightningAddress)
+        let normalizedWalletPubkey = walletPubkey
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
@@ -95,8 +149,11 @@ enum MessageRecipientTrustStore {
 
 enum MessageKeyBindingVerifier {
     private static let supportedSignatureVersions: Set<Int> = [1, 2]
+    private static let messagingIdentityV4SignatureVersion = 4
     private static let supportedEnvelopeSignatureVersions: Set<Int> = [1, 2]
+    private static let messagingEnvelopeV4SignatureVersion = 3
     private static let messagingIdentityDomain = AppConfig.messagingIdentityDomain
+    private static let messagingIdentityV4Domain = "splitrewards.messaging"
 
     enum VerificationError: LocalizedError {
         case missingBinding
@@ -105,6 +162,7 @@ enum MessageKeyBindingVerifier {
         case unsupportedSignatureVersion
         case unsupportedEnvelopeSignatureVersion
         case invalidWalletPubkey
+        case invalidLightningAddressHash
         case invalidMessagingSigningPubkey
         case invalidSignatureEncoding
         case invalidSignature
@@ -124,6 +182,8 @@ enum MessageKeyBindingVerifier {
                 return "Unsupported messaging envelope signature version."
             case .invalidWalletPubkey:
                 return "Recipient wallet pubkey is invalid."
+            case .invalidLightningAddressHash:
+                return "Recipient Lightning address hash is invalid."
             case .invalidMessagingSigningPubkey:
                 return "Sender messaging signing key is invalid."
             case .invalidSignatureEncoding:
@@ -140,6 +200,14 @@ enum MessageKeyBindingVerifier {
         try verifyBinding(recipient.identityBindingPayload)
     }
 
+    static func verifyRecipientBindingV4(_ recipient: MessagingRecipient) throws {
+        guard let binding = recipient.identityBindingPayloadV4 else {
+            throw VerificationError.missingBinding
+        }
+
+        try verifyBindingV4(binding)
+    }
+
     static func verifyRegistration(_ registration: MessageKeyManager.RegistrationResponse) throws {
         guard let binding = registration.identityBindingPayload else {
             throw VerificationError.missingBinding
@@ -148,10 +216,30 @@ enum MessageKeyBindingVerifier {
         try verifyBinding(binding)
     }
 
+    static func verifyRegistrationV4(_ registration: MessageKeyManager.RegistrationResponse) throws {
+        guard let binding = registration.identityBindingPayloadV4 else {
+            throw VerificationError.missingBinding
+        }
+
+        try verifyBindingV4(binding)
+    }
+
     static func verifyBinding(_ binding: MessagingIdentityBindingPayload) throws {
         try verifyBinding(
             walletPubkey: binding.walletPubkey,
             lightningAddress: binding.lightningAddress,
+            messagingPubkey: binding.messagingPubkey,
+            messagingIdentitySignature: binding.messagingIdentitySignature,
+            messagingIdentitySignatureVersion: binding.messagingIdentitySignatureVersion,
+            signedAt: binding.messagingIdentitySignedAt
+        )
+    }
+
+    static func verifyBindingV4(_ binding: MessagingIdentityBindingPayloadV4) throws {
+        try verifyBindingV4(
+            walletPubkey: binding.walletPubkey,
+            lightningAddressHash: binding.lightningAddressHash,
+            lightningAddressHashScheme: binding.lightningAddressHashScheme,
             messagingPubkey: binding.messagingPubkey,
             messagingIdentitySignature: binding.messagingIdentitySignature,
             messagingIdentitySignatureVersion: binding.messagingIdentitySignatureVersion,
@@ -186,6 +274,47 @@ enum MessageKeyBindingVerifier {
         )
     }
 
+    static func verifyBindingV4(
+        walletPubkey: String,
+        lightningAddressHash: String,
+        lightningAddressHashScheme: String,
+        messagingPubkey: String,
+        messagingIdentitySignature: String,
+        messagingIdentitySignatureVersion: Int,
+        signedAt: Int
+    ) throws {
+        guard messagingIdentitySignatureVersion == messagingIdentityV4SignatureVersion else {
+            throw VerificationError.unsupportedSignatureVersion
+        }
+
+        let normalizedLightningAddressHash = lightningAddressHash
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard normalizedLightningAddressHash.count == 64,
+              normalizedLightningAddressHash.allSatisfy(\.isHexDigit) else {
+            throw VerificationError.invalidLightningAddressHash
+        }
+
+        guard lightningAddressHashScheme
+            .trimmingCharacters(in: .whitespacesAndNewlines) == MessagingPrivacyV4.lightningAddressClientHashScheme else {
+            throw VerificationError.invalidLightningAddressHash
+        }
+
+        let canonicalMessage = buildMessagingIdentityBindingMessageV4(
+            version: messagingIdentitySignatureVersion,
+            walletPubkey: walletPubkey,
+            lightningAddressHash: normalizedLightningAddressHash,
+            messagingPubkey: messagingPubkey,
+            signedAt: signedAt
+        )
+        try verifySignedMessage(
+            canonicalMessage,
+            signatureHex: messagingIdentitySignature,
+            walletPubkey: walletPubkey,
+            invalidSignatureError: .invalidSignature
+        )
+    }
+
     static func buildMessagingIdentityBindingMessage(
         version: Int,
         walletPubkey: String,
@@ -199,6 +328,25 @@ enum MessageKeyBindingVerifier {
         domain=\(messagingIdentityDomain)
         walletPubkey=\(walletPubkey)
         lightningAddress=\(lightningAddress)
+        messagingPubkey=\(messagingPubkey)
+        signedAt=\(signedAt)
+        """
+    }
+
+    static func buildMessagingIdentityBindingMessageV4(
+        version: Int,
+        walletPubkey: String,
+        lightningAddressHash: String,
+        messagingPubkey: String,
+        signedAt: Int
+    ) -> String {
+        """
+        SplitRewards Messaging Identity Authorization
+        version=\(version)
+        domain=\(messagingIdentityV4Domain)
+        hashScheme=\(MessagingPrivacyV4.lightningAddressClientHashScheme)
+        walletPubkey=\(walletPubkey)
+        lightningAddressHash=\(lightningAddressHash)
         messagingPubkey=\(messagingPubkey)
         signedAt=\(signedAt)
         """
@@ -238,6 +386,28 @@ enum MessageKeyBindingVerifier {
         """
     }
 
+    static func buildMessagingDeviceRegistrationMessageV4(
+        version: Int,
+        walletPubkey: String,
+        messagingPubkey: String,
+        platform: String,
+        environment: String,
+        deviceToken: String,
+        signedAt: Int
+    ) -> String {
+        """
+        SplitRewards Messaging Device Registration
+        version=\(version)
+        domain=\(messagingIdentityV4Domain)
+        walletPubkey=\(walletPubkey)
+        messagingPubkey=\(messagingPubkey)
+        platform=\(platform)
+        environment=\(environment)
+        deviceToken=\(deviceToken)
+        signedAt=\(signedAt)
+        """
+    }
+
     static func buildMessagingSigningKeyBindingMessage(
         version: Int,
         walletPubkey: String,
@@ -252,6 +422,27 @@ enum MessageKeyBindingVerifier {
         domain=\(messagingIdentityDomain)
         walletPubkey=\(walletPubkey)
         lightningAddress=\(lightningAddress)
+        messagingPubkey=\(messagingPubkey)
+        messagingSigningPubkey=\(messagingSigningPubkey)
+        signedAt=\(signedAt)
+        """
+    }
+
+    static func buildMessagingSigningKeyBindingMessageV4(
+        version: Int,
+        walletPubkey: String,
+        lightningAddressHash: String,
+        messagingPubkey: String,
+        messagingSigningPubkey: String,
+        signedAt: Int
+    ) -> String {
+        """
+        SplitRewards Messaging Signing Key Authorization
+        version=\(version)
+        domain=\(messagingIdentityV4Domain)
+        hashScheme=\(MessagingPrivacyV4.lightningAddressClientHashScheme)
+        walletPubkey=\(walletPubkey)
+        lightningAddressHash=\(lightningAddressHash)
         messagingPubkey=\(messagingPubkey)
         messagingSigningPubkey=\(messagingSigningPubkey)
         signedAt=\(signedAt)
@@ -279,6 +470,57 @@ enum MessageKeyBindingVerifier {
             walletPubkey: certificate.walletPubkey,
             invalidSignatureError: .invalidSignature
         )
+    }
+
+    static func verifyMessagingSigningCertificateV4(
+        _ certificate: MessageSigningCertificateV4
+    ) throws {
+        guard certificate.messagingSigningPubkeySignatureVersion == 2 else {
+            throw VerificationError.unsupportedSignatureVersion
+        }
+
+        let canonicalMessage = buildMessagingSigningKeyBindingMessageV4(
+            version: certificate.messagingSigningPubkeySignatureVersion,
+            walletPubkey: certificate.walletPubkey,
+            lightningAddressHash: certificate.lightningAddressHash,
+            messagingPubkey: certificate.messagingPubkey,
+            messagingSigningPubkey: certificate.messagingSigningPubkey,
+            signedAt: certificate.messagingSigningPubkeySignedAt
+        )
+        try verifySignedMessage(
+            canonicalMessage,
+            signatureHex: certificate.messagingSigningPubkeySignature,
+            walletPubkey: certificate.walletPubkey,
+            invalidSignatureError: .invalidSignature
+        )
+    }
+
+    static func buildMessagingEnvelopeSignatureMessageV4(
+        version: Int,
+        clientMessageId: String,
+        senderBinding: MessagingIdentityBindingPayloadV4,
+        recipientBinding: MessagingIdentityBindingPayloadV4,
+        messageType: String,
+        plaintext: String,
+        createdAtClientMs: Int64,
+        envelopeVersion: Int
+    ) -> String {
+        """
+        SplitRewards Messaging Envelope Authorization
+        version=\(version)
+        domain=\(messagingIdentityV4Domain)
+        clientMessageId=\(clientMessageId)
+        senderWalletPubkey=\(senderBinding.walletPubkey)
+        senderLightningAddressHash=\(senderBinding.lightningAddressHash)
+        senderMessagingPubkey=\(senderBinding.messagingPubkey)
+        recipientWalletPubkey=\(recipientBinding.walletPubkey)
+        recipientLightningAddressHash=\(recipientBinding.lightningAddressHash)
+        recipientMessagingPubkey=\(recipientBinding.messagingPubkey)
+        messageType=\(messageType)
+        plaintext=\(plaintext)
+        createdAtClientMs=\(createdAtClientMs)
+        envelopeVersion=\(envelopeVersion)
+        """
     }
 
     static func buildMessagingEnvelopeSignatureMessage(
@@ -359,7 +601,9 @@ enum MessageKeyBindingVerifier {
         guard let ciphertext = message.ciphertext,
               let nonce = message.nonce,
               let senderEphemeralPubkey = message.senderEphemeralPubkey,
-              let createdAtClientMs = message.createdAtClientMilliseconds
+              let createdAtClientMs = message.createdAtClientMilliseconds,
+              let recipientWalletPubkey = message.recipientWalletPubkey,
+              let recipientLightningAddress = message.recipientLightningAddress
         else {
             throw VerificationError.missingCreatedAtClient
         }
@@ -370,8 +614,8 @@ enum MessageKeyBindingVerifier {
             version: senderEnvelopeSignatureVersion,
             clientMessageId: message.clientMessageId,
             senderBinding: senderBinding,
-            recipientWalletPubkey: message.recipientWalletPubkey,
-            recipientLightningAddress: message.recipientLightningAddress,
+            recipientWalletPubkey: recipientWalletPubkey,
+            recipientLightningAddress: recipientLightningAddress,
             recipientMessagingPubkey: message.recipientMessagingPubkey,
             messageType: message.messageType,
             ciphertext: ciphertext,
@@ -397,7 +641,9 @@ enum MessageKeyBindingVerifier {
             throw VerificationError.unsupportedEnvelopeSignatureVersion
         }
 
-        guard let createdAtClientMs = message.createdAtClientMilliseconds else {
+        guard let createdAtClientMs = message.createdAtClientMilliseconds,
+              let recipientWalletPubkey = message.recipientWalletPubkey,
+              let recipientLightningAddress = message.recipientLightningAddress else {
             throw VerificationError.missingCreatedAtClient
         }
 
@@ -418,9 +664,54 @@ enum MessageKeyBindingVerifier {
             version: sealedPayload.messageSignatureVersion,
             clientMessageId: message.clientMessageId,
             senderBinding: sealedPayload.sender,
-            recipientWalletPubkey: message.recipientWalletPubkey,
-            recipientLightningAddress: message.recipientLightningAddress,
+            recipientWalletPubkey: recipientWalletPubkey,
+            recipientLightningAddress: recipientLightningAddress,
             recipientMessagingPubkey: message.recipientMessagingPubkey,
+            messageType: message.messageType,
+            plaintext: sealedPayload.body,
+            createdAtClientMs: createdAtClientMs,
+            envelopeVersion: message.envelopeVersion
+        )
+        try verifyMessagingSignature(
+            canonicalMessage,
+            signatureHex: sealedPayload.messageSignature,
+            messagingSigningPubkey: sealedPayload.messagingSigningPubkey
+        )
+    }
+
+    static func verifySealedIncomingEnvelopeV4(
+        _ message: InboxMessage,
+        sealedPayload: SealedSenderMessagePayloadV4,
+        recipientBinding: MessagingIdentityBindingPayloadV4
+    ) throws {
+        guard sealedPayload.messageSignatureVersion == messagingEnvelopeV4SignatureVersion else {
+            throw VerificationError.unsupportedEnvelopeSignatureVersion
+        }
+
+        guard let createdAtClientMs = message.createdAtClientMilliseconds else {
+            throw VerificationError.missingCreatedAtClient
+        }
+
+        try verifyBindingV4(sealedPayload.sender)
+        try verifyBindingV4(recipientBinding)
+        try verifyMessagingSigningCertificateV4(
+            MessageSigningCertificateV4(
+                walletPubkey: sealedPayload.sender.walletPubkey,
+                lightningAddressHash: sealedPayload.sender.lightningAddressHash,
+                lightningAddressHashScheme: sealedPayload.sender.lightningAddressHashScheme,
+                messagingPubkey: sealedPayload.sender.messagingPubkey,
+                messagingSigningPubkey: sealedPayload.messagingSigningPubkey,
+                messagingSigningPubkeySignature: sealedPayload.messagingSigningPubkeySignature,
+                messagingSigningPubkeySignatureVersion: sealedPayload.messagingSigningPubkeySignatureVersion,
+                messagingSigningPubkeySignedAt: sealedPayload.messagingSigningPubkeySignedAt
+            )
+        )
+
+        let canonicalMessage = buildMessagingEnvelopeSignatureMessageV4(
+            version: sealedPayload.messageSignatureVersion,
+            clientMessageId: message.clientMessageId,
+            senderBinding: sealedPayload.sender,
+            recipientBinding: recipientBinding,
             messageType: message.messageType,
             plaintext: sealedPayload.body,
             createdAtClientMs: createdAtClientMs,

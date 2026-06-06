@@ -74,7 +74,7 @@ enum AckMessagesAPI {
 
         try await authManager.ensureSession(walletManager: walletManager)
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v3/ack") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/ack") else {
             throw URLError(.badURL)
         }
 
@@ -132,7 +132,7 @@ enum RekeyMessagesAPI {
 
         try await authManager.ensureSession(walletManager: walletManager)
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v3/rekey-required") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/rekey-required") else {
             throw URLError(.badURL)
         }
 
@@ -196,7 +196,7 @@ enum DecryptFailedMessagesAPI {
 
         try await authManager.ensureSession(walletManager: walletManager)
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v3/decrypt-failed") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/decrypt-failed") else {
             throw URLError(.badURL)
         }
 
@@ -270,7 +270,7 @@ enum OutgoingMessageStatusesAPI {
         try await authManager.ensureSession(walletManager: walletManager)
 
         let clampedLimit = min(max(limit, 1), 200)
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v3/outgoing-statuses?limit=\(clampedLimit)") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/outgoing-statuses?limit=\(clampedLimit)") else {
             throw URLError(.badURL)
         }
 

@@ -126,7 +126,7 @@ final class MessagingDeviceTokenManager: ObservableObject {
                 authManager: authManager,
                 walletManager: walletManager
             )
-            guard let activeMessagingPubkey = registration.messagingPubkey?
+            guard let activeMessagingPubkey = (registration.identityBindingPayloadV4?.messagingPubkey ?? registration.messagingPubkey)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased(),
                   !activeMessagingPubkey.isEmpty else {

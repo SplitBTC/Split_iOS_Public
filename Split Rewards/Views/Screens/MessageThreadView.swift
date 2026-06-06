@@ -307,6 +307,11 @@ struct MessageThreadView: View {
             await refreshContactState()
             await refreshBlockState()
             await refreshProfilePic()
+
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                await refreshThread(force: true)
+            }
         }
         .onAppear {
             MessageThreadPresenceTracker.shared.enterConversation(conversationId)

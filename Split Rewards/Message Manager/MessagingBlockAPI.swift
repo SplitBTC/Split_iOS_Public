@@ -1,7 +1,8 @@
 import Foundation
 
-struct MessagingBlockedUser: Identifiable, Decodable, Hashable {
+struct MessagingBlockedUser: Identifiable, Codable, Hashable {
     let blockId: String
+    let blockedMessagingAccountId: String?
     let blockedUserId: String
     let blockedWalletPubkey: String
     let blockedLightningAddress: String?
@@ -17,6 +18,74 @@ struct MessagingBlockedUser: Identifiable, Decodable, Hashable {
             .lowercased()
         guard let normalized, !normalized.isEmpty else { return nil }
         return normalized
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case blockId
+        case blockedMessagingAccountId
+        case blockedUserId
+        case blockedWalletPubkey
+        case blockedLightningAddress
+        case blockedProfilePicUrl
+        case createdAt
+        case updatedAt
+    }
+
+    init(
+        blockId: String,
+        blockedMessagingAccountId: String?,
+        blockedUserId: String,
+        blockedWalletPubkey: String,
+        blockedLightningAddress: String?,
+        blockedProfilePicUrl: String?,
+        createdAt: Date?,
+        updatedAt: Date?
+    ) {
+        self.blockId = blockId
+        self.blockedMessagingAccountId = blockedMessagingAccountId
+        self.blockedUserId = blockedUserId
+        self.blockedWalletPubkey = blockedWalletPubkey
+        self.blockedLightningAddress = blockedLightningAddress
+        self.blockedProfilePicUrl = blockedProfilePicUrl
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        blockId = try container.decode(String.self, forKey: .blockId)
+        blockedMessagingAccountId = try container.decodeIfPresent(
+            String.self,
+            forKey: .blockedMessagingAccountId
+        )
+        blockedUserId = try container.decodeIfPresent(String.self, forKey: .blockedUserId)
+            ?? blockedMessagingAccountId
+            ?? blockId
+        blockedWalletPubkey = try container.decodeIfPresent(String.self, forKey: .blockedWalletPubkey)
+            ?? blockedMessagingAccountId
+            ?? ""
+        blockedLightningAddress = try container.decodeIfPresent(
+            String.self,
+            forKey: .blockedLightningAddress
+        )
+        blockedProfilePicUrl = try container.decodeIfPresent(String.self, forKey: .blockedProfilePicUrl)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+    }
+
+    func withLocalMetadata(walletPubkey: String?, lightningAddress: String?) -> MessagingBlockedUser {
+        MessagingBlockedUser(
+            blockId: blockId,
+            blockedMessagingAccountId: blockedMessagingAccountId,
+            blockedUserId: blockedUserId,
+            blockedWalletPubkey: walletPubkey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+                ?? blockedWalletPubkey,
+            blockedLightningAddress: lightningAddress?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
+                ?? blockedLightningAddress,
+            blockedProfilePicUrl: blockedProfilePicUrl,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
     }
 }
 
@@ -52,6 +121,17 @@ enum MessagingBlockAPIError: LocalizedError {
 }
 
 enum MessagingBlockAPI {
+    private struct CachedBlockMetadata: Codable {
+        let blockId: String
+        let blockedMessagingAccountId: String?
+        let blockedWalletPubkey: String?
+        let blockedLightningAddress: String?
+    }
+
+    private static var cacheKey: String {
+        "split.messaging.v4.blockMetadata.\(AppConfig.messagingPushEnvironment)"
+    }
+
     private static let fractionalFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -69,7 +149,7 @@ enum MessagingBlockAPI {
         authManager: AuthManager,
         walletManager: WalletManager
     ) async throws -> [MessagingBlockedUser] {
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/blocks") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/blocks") else {
             throw MessagingBlockAPIError.invalidURL
         }
 
@@ -82,6 +162,7 @@ enum MessagingBlockAPI {
 
         do {
             return try decoder().decode(MessagingBlockListResponse.self, from: data).blocks
+                .map(applyCachedMetadata)
         } catch {
             throw MessagingBlockAPIError.invalidResponse
         }
@@ -94,22 +175,24 @@ enum MessagingBlockAPI {
         authManager: AuthManager,
         walletManager: WalletManager
     ) async throws -> MessagingBlockedUser {
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/blocks") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/blocks") else {
             throw MessagingBlockAPIError.invalidURL
         }
 
         struct RequestBody: Encodable {
-            let walletPubkey: String?
-            let lightningAddress: String?
+            let lightningAddressHash: String
+            let lightningAddressHashScheme: String
         }
 
         let normalizedWalletPubkey = walletPubkey?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfBlank
-        let normalizedLightningAddress = lightningAddress?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .nilIfBlank
+        guard let normalizedLightningAddress = try? MessagingPrivacyV4.normalizeLightningAddress(lightningAddress ?? ""),
+              let lightningAddressHash = try? MessagingPrivacyV4.lightningAddressClientHash(
+                for: normalizedLightningAddress
+              ) else {
+            throw MessagingBlockAPIError.invalidResponse
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -118,8 +201,8 @@ enum MessagingBlockAPI {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONEncoder().encode(
             RequestBody(
-                walletPubkey: normalizedWalletPubkey,
-                lightningAddress: normalizedLightningAddress
+                lightningAddressHash: lightningAddressHash,
+                lightningAddressHashScheme: MessagingPrivacyV4.lightningAddressClientHashScheme
             )
         )
 
@@ -130,8 +213,13 @@ enum MessagingBlockAPI {
             guard let block = decoded.block else {
                 throw MessagingBlockAPIError.invalidResponse
             }
+            let augmentedBlock = block.withLocalMetadata(
+                walletPubkey: normalizedWalletPubkey,
+                lightningAddress: normalizedLightningAddress
+            )
+            cacheMetadata(for: augmentedBlock)
             NotificationCenter.default.post(name: .messagingBlocksDidChange, object: nil)
-            return block
+            return augmentedBlock
         } catch let error as MessagingBlockAPIError {
             throw error
         } catch {
@@ -145,9 +233,11 @@ enum MessagingBlockAPI {
         authManager: AuthManager,
         walletManager: WalletManager
     ) async throws -> Bool {
-        let normalizedWalletPubkey = blockedWalletPubkey
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/blocks/\(normalizedWalletPubkey)") else {
+        let targetHash = try blockTargetHash(for: blockedWalletPubkey)
+        guard let encodedTarget = targetHash.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            throw MessagingBlockAPIError.invalidURL
+        }
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/blocks/\(encodedTarget)") else {
             throw MessagingBlockAPIError.invalidURL
         }
 
@@ -160,11 +250,33 @@ enum MessagingBlockAPI {
 
         do {
             let decoded = try decoder().decode(MessagingBlockMutationResponse.self, from: data)
+            if decoded.didDelete == true {
+                removeCachedMetadata(forTarget: blockedWalletPubkey)
+            }
             NotificationCenter.default.post(name: .messagingBlocksDidChange, object: nil)
             return decoded.didDelete ?? false
         } catch {
             throw MessagingBlockAPIError.invalidResponse
         }
+    }
+
+    private static func blockTargetHash(for target: String) throws -> String {
+        let normalizedTarget = target
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedTarget.contains("@") {
+            return try MessagingPrivacyV4.lightningAddressClientHash(for: normalizedTarget)
+        }
+
+        if let cached = cachedMetadata().first(where: { metadata in
+            metadata.blockedWalletPubkey == normalizedTarget ||
+                metadata.blockedMessagingAccountId == normalizedTarget ||
+                metadata.blockId == normalizedTarget
+        }),
+           let lightningAddress = cached.blockedLightningAddress {
+            return try MessagingPrivacyV4.lightningAddressClientHash(for: lightningAddress)
+        }
+
+        throw MessagingBlockAPIError.invalidResponse
     }
 
     @MainActor
@@ -228,6 +340,67 @@ enum MessagingBlockAPI {
             )
         }
         return decoder
+    }
+
+    private static func cachedMetadata() -> [CachedBlockMetadata] {
+        guard let data = UserDefaults.standard.data(forKey: cacheKey),
+              let decoded = try? JSONDecoder().decode([CachedBlockMetadata].self, from: data) else {
+            return []
+        }
+
+        return decoded
+    }
+
+    private static func saveCachedMetadata(_ entries: [CachedBlockMetadata]) {
+        guard let data = try? JSONEncoder().encode(entries) else {
+            return
+        }
+
+        UserDefaults.standard.set(data, forKey: cacheKey)
+    }
+
+    private static func cacheMetadata(for block: MessagingBlockedUser) {
+        var entries = cachedMetadata()
+        entries.removeAll { entry in
+            entry.blockId == block.blockId ||
+                (block.blockedMessagingAccountId != nil &&
+                    entry.blockedMessagingAccountId == block.blockedMessagingAccountId) ||
+                (block.blockedWalletPubkey.nilIfBlank != nil &&
+                    entry.blockedWalletPubkey == block.blockedWalletPubkey)
+        }
+        entries.append(CachedBlockMetadata(
+            blockId: block.blockId,
+            blockedMessagingAccountId: block.blockedMessagingAccountId,
+            blockedWalletPubkey: block.blockedWalletPubkey.nilIfBlank,
+            blockedLightningAddress: block.blockedLightningAddress?.nilIfBlank
+        ))
+        saveCachedMetadata(entries)
+    }
+
+    private static func removeCachedMetadata(forTarget target: String) {
+        let normalizedTarget = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        let entries = cachedMetadata().filter { entry in
+            entry.blockId != normalizedTarget &&
+                entry.blockedMessagingAccountId != normalizedTarget &&
+                entry.blockedWalletPubkey != normalizedTarget &&
+                entry.blockedLightningAddress != normalizedTarget
+        }
+        saveCachedMetadata(entries)
+    }
+
+    private static func applyCachedMetadata(_ block: MessagingBlockedUser) -> MessagingBlockedUser {
+        guard let cached = cachedMetadata().first(where: { entry in
+            entry.blockId == block.blockId ||
+                (block.blockedMessagingAccountId != nil &&
+                    entry.blockedMessagingAccountId == block.blockedMessagingAccountId)
+        }) else {
+            return block
+        }
+
+        return block.withLocalMetadata(
+            walletPubkey: cached.blockedWalletPubkey,
+            lightningAddress: cached.blockedLightningAddress
+        )
     }
 }
 

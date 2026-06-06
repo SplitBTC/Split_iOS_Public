@@ -15,7 +15,8 @@ struct MessagesInboxResponse: Decodable {
 struct InboxMessage: Identifiable, Decodable {
     let id: String
     let clientMessageId: String
-    let senderWalletPubkey: String
+    let senderMessagingAccountId: String?
+    let senderWalletPubkey: String?
     let senderMessagingPubkey: String
     let senderLightningAddress: String?
     let senderMessagingIdentitySignature: String?
@@ -23,9 +24,10 @@ struct InboxMessage: Identifiable, Decodable {
     let senderMessagingIdentitySignedAt: Date?
     let senderEnvelopeSignature: String?
     let senderEnvelopeSignatureVersion: Int?
-    let recipientWalletPubkey: String
+    let recipientMessagingAccountId: String?
+    let recipientWalletPubkey: String?
     let recipientMessagingPubkey: String
-    let recipientLightningAddress: String
+    let recipientLightningAddress: String?
     let messageType: String
     let envelopeVersion: Int
     let ciphertext: String?
@@ -42,6 +44,7 @@ struct InboxMessage: Identifiable, Decodable {
     enum CodingKeys: String, CodingKey {
         case id = "messageId"
         case clientMessageId
+        case senderMessagingAccountId
         case senderWalletPubkey
         case senderMessagingPubkey
         case senderLightningAddress
@@ -50,6 +53,7 @@ struct InboxMessage: Identifiable, Decodable {
         case senderMessagingIdentitySignedAt
         case senderEnvelopeSignature
         case senderEnvelopeSignatureVersion
+        case recipientMessagingAccountId
         case recipientWalletPubkey
         case recipientMessagingPubkey
         case recipientLightningAddress
@@ -74,7 +78,8 @@ struct InboxMessage: Identifiable, Decodable {
               !lightningAddress.isEmpty,
               let senderMessagingIdentitySignature,
               let senderMessagingIdentitySignatureVersion,
-              let senderMessagingIdentitySignedAt
+              let senderMessagingIdentitySignedAt,
+              let senderWalletPubkey
         else {
             return nil
         }
@@ -116,7 +121,7 @@ enum MessagesInboxAPI {
 
         try await authManager.ensureSession(walletManager: walletManager)
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v3/inbox") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/inbox") else {
             throw URLError(.badURL)
         }
 

@@ -17,3 +17,15 @@ struct SealedSenderMessagePayload: Codable {
     let messageSignature: String
     let messageSignatureVersion: Int
 }
+
+struct SealedSenderMessagePayloadV4: Codable {
+    let body: String
+    let sender: MessagingIdentityBindingPayloadV4
+    let senderLightningAddress: String
+    let messagingSigningPubkey: String
+    let messagingSigningPubkeySignature: String
+    let messagingSigningPubkeySignatureVersion: Int
+    let messagingSigningPubkeySignedAt: Int
+    let messageSignature: String
+    let messageSignatureVersion: Int
+}

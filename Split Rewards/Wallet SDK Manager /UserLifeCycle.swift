@@ -195,7 +195,7 @@ extension WalletManager {
 
     // MARK: - Seed storage helpers
 
-    private func readLocalSeed() -> String? {
+    func readLocalSeed() -> String? {
         let trimmedSeed = KeychainHelper.read(forKey: walletSeedKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
 

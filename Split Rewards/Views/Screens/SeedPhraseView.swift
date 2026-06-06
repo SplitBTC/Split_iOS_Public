@@ -32,8 +32,8 @@ struct SeedPhraseBackupView: View {
         onCancel: (() -> Void)? = nil,
         title: String = "Your Recovery Phrase",
         subtitle: String = "These 12 words are the backup for your wallet and Split account.",
-        warningText: String = "This is the only time Split will show you this recovery phrase. Save it now before continuing.",
-        acknowledgementText: String = "I understand Split will not show this recovery phrase again.",
+        warningText: String = "Save this recovery phrase before continuing. If this device is lost, replaced, or app data is erased, Split cannot recover it for you.",
+        acknowledgementText: String = "I saved my recovery phrase somewhere safe.",
         confirmTitle: String = "I saved my recovery phrase",
         discardTitle: String = "Discard this wallet?",
         discardMessage: String = "This recovery phrase has not been saved yet. If you cancel, this wallet setup will be discarded and you will need to create a new wallet."
@@ -152,7 +152,7 @@ struct SeedPhraseBackupView: View {
                                     .font(.footnote.weight(.semibold))
                                     .foregroundColor(.yellow)
 
-                                Text("Split cannot recover this phrase for you, and the app will not show it again after setup.")
+                                Text("Split cannot recover this phrase for you if this device is lost, replaced, or app data is erased.")
                                     .font(.footnote)
                                     .foregroundColor(.white.opacity(0.74))
 

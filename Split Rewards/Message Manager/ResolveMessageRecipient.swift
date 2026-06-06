@@ -13,9 +13,33 @@ struct ResolveMessageRecipientResponse: Decodable {
     let directory: MessagingDirectoryProofPayload
 }
 
+private struct ResolveMessageRecipientV4Response: Decodable {
+    let ok: Bool
+    let recipient: MessagingRecipientV4Payload
+    let directory: MessagingDirectoryV4Payload?
+}
+
+private struct MessagingRecipientV4Payload: Decodable {
+    let walletPubkey: String
+    let lightningAddressHash: String
+    let lightningAddressHashScheme: String
+    let messagingPubkey: String
+    let messagingIdentitySignature: String
+    let messagingIdentitySignatureVersion: Int
+    let messagingIdentitySignedAt: Int
+}
+
+private struct MessagingDirectoryV4Payload: Decodable {
+    let mode: String?
+    let proof: String?
+    let issuedAt: Date?
+}
+
 struct MessagingRecipient: Codable, Hashable {
     let walletPubkey: String
     let lightningAddress: String
+    let lightningAddressHash: String?
+    let lightningAddressHashScheme: String?
     let messagingPubkey: String
     let messagingIdentitySignature: String
     let messagingIdentitySignatureVersion: Int
@@ -28,6 +52,28 @@ struct MessagingRecipient: Codable, Hashable {
             lightningAddress: lightningAddress
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased(),
+            messagingPubkey: messagingPubkey,
+            messagingIdentitySignature: messagingIdentitySignature,
+            messagingIdentitySignatureVersion: messagingIdentitySignatureVersion,
+            messagingIdentitySignedAt: Int(messagingIdentitySignedAt.timeIntervalSince1970)
+        )
+    }
+
+    var identityBindingPayloadV4: MessagingIdentityBindingPayloadV4? {
+        guard let lightningAddressHash = lightningAddressHash?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
+              !lightningAddressHash.isEmpty,
+              let lightningAddressHashScheme = lightningAddressHashScheme?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !lightningAddressHashScheme.isEmpty else {
+            return nil
+        }
+
+        return MessagingIdentityBindingPayloadV4(
+            walletPubkey: walletPubkey,
+            lightningAddressHash: lightningAddressHash,
+            lightningAddressHashScheme: lightningAddressHashScheme,
             messagingPubkey: messagingPubkey,
             messagingIdentitySignature: messagingIdentitySignature,
             messagingIdentitySignatureVersion: messagingIdentitySignatureVersion,
@@ -57,20 +103,28 @@ enum ResolveMessageRecipientAPI {
     ) async throws -> MessagingRecipient {
         try await authManager.ensureSession(walletManager: walletManager)
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v3/directory/lookup") else {
+        guard let url = URL(string: "\(AppConfig.baseURL)/messaging/v4/directory/lookup") else {
             throw URLError(.badURL)
         }
 
-        let normalizedLightningAddress = lightningAddress
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
+        let normalizedLightningAddress = try MessagingPrivacyV4.normalizeLightningAddress(lightningAddress)
+        let lightningAddressHash = try MessagingPrivacyV4.lightningAddressClientHash(
+            for: normalizedLightningAddress
+        )
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try JSONEncoder().encode(["lightningAddress": normalizedLightningAddress])
+        struct RequestBody: Encodable {
+            let lightningAddressHash: String
+            let lightningAddressHashScheme: String
+        }
+        request.httpBody = try JSONEncoder().encode(RequestBody(
+            lightningAddressHash: lightningAddressHash,
+            lightningAddressHashScheme: MessagingPrivacyV4.lightningAddressClientHashScheme
+        ))
 
         var (data, response) = try await URLSession.shared.data(for: request)
 
@@ -118,14 +172,31 @@ enum ResolveMessageRecipientAPI {
             )
         }
         do {
-            let decoded = try decoder.decode(ResolveMessageRecipientResponse.self, from: data)
-            let recipient = decoded.recipient
-            try MessageKeyBindingVerifier.verifyRecipientBinding(recipient)
-            try MessagingDirectoryVerifier.verifyDirectoryProof(
-                binding: recipient.identityBindingPayload,
-                directory: decoded.directory
+            let decoded = try decoder.decode(ResolveMessageRecipientV4Response.self, from: data)
+            let recipient = MessagingRecipient(
+                walletPubkey: decoded.recipient.walletPubkey,
+                lightningAddress: normalizedLightningAddress,
+                lightningAddressHash: decoded.recipient.lightningAddressHash,
+                lightningAddressHashScheme: decoded.recipient.lightningAddressHashScheme,
+                messagingPubkey: decoded.recipient.messagingPubkey,
+                messagingIdentitySignature: decoded.recipient.messagingIdentitySignature,
+                messagingIdentitySignatureVersion: decoded.recipient.messagingIdentitySignatureVersion,
+                messagingIdentitySignedAt: Date(
+                    timeIntervalSince1970: TimeInterval(decoded.recipient.messagingIdentitySignedAt)
+                ),
+                profilePicUrl: nil
             )
-            try MessageDirectoryCheckpointStore.storeIfNewer(decoded.directory.checkpoint)
+
+            guard recipient.lightningAddressHash == lightningAddressHash,
+                  recipient.lightningAddressHashScheme == MessagingPrivacyV4.lightningAddressClientHashScheme else {
+                throw MessageKeyBindingVerifier.VerificationError.invalidLightningAddressHash
+            }
+
+            try MessageKeyBindingVerifier.verifyRecipientBindingV4(recipient)
+            try MessageRecipientTrustStore.enforceOrPin(
+                lightningAddress: normalizedLightningAddress,
+                walletPubkey: recipient.walletPubkey
+            )
             return recipient
         } catch {
             throw error

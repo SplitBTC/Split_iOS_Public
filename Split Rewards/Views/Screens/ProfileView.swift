@@ -27,9 +27,7 @@ struct ProfileView: View {
     private let cardSurface = Color.splitInputSurfaceTertiary
     private let cardStroke = Color.white.opacity(0.06)
 
-    @State private var hasConnectedLightningNode = false
-    @State private var hasConnectedNWCWallet = false
-    @State private var hasConnectedCoreLightningNode = false
+    @State private var connectedLightningWalletCount = ExternalWalletStore.shared.loadWallets().count
 
     var body: some View {
         ZStack {
@@ -73,7 +71,7 @@ struct ProfileView: View {
                 image: "bolt.fill",
                 title: "Lightning Wallets",
                 subtitle: lightningConnectionsSubtitle,
-                destination: AnyView(LightningConnectionsView())
+                destination: lightningWalletsDestination
             ),
             ProfileNavItem(
                 id: "add-merchant",
@@ -128,27 +126,27 @@ struct ProfileView: View {
     }
 
     private func refreshWalletConnectionState() {
-        hasConnectedLightningNode = LNDCredentialStore.shared.activeNode() != nil
-        hasConnectedNWCWallet = NWCCredentialStore.shared.activeWallet() != nil
-        hasConnectedCoreLightningNode = CoreLightningCredentialStore.shared.activeNode() != nil
+        connectedLightningWalletCount = ExternalWalletStore.shared.loadWallets().count
     }
 
     private var lightningConnectionsSubtitle: String {
-        let connectedCount = [
-            hasConnectedLightningNode,
-            hasConnectedNWCWallet,
-            hasConnectedCoreLightningNode
-        ].filter { $0 }.count
-
-        if connectedCount > 1 {
+        if connectedLightningWalletCount > 1 {
             return "Manage your Lightning connections"
         }
 
-        if connectedCount == 1 {
+        if connectedLightningWalletCount == 1 {
             return "Manage your Lightning connection"
         }
 
         return "Connect a Lightning node or wallet"
+    }
+
+    private var lightningWalletsDestination: AnyView {
+        if connectedLightningWalletCount == 0 {
+            return AnyView(ProfileAddLightningWalletDestination())
+        }
+
+        return AnyView(LightningConnectionsView())
     }
 
     private var profileHeaderSection: some View {
@@ -245,6 +243,16 @@ struct ProfileView: View {
             .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: 6)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ProfileAddLightningWalletDestination: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        AddLightningWalletView {
+            dismiss()
+        }
     }
 }
 

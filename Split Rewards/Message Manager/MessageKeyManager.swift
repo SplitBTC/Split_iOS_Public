@@ -19,6 +19,23 @@ struct MessageSigningCertificate: Codable, Hashable {
     let messagingSigningPubkeySignedAt: Int
 }
 
+struct MessageSigningCertificateV4: Codable, Hashable {
+    let walletPubkey: String
+    let lightningAddressHash: String
+    let lightningAddressHashScheme: String
+    let messagingPubkey: String
+    let messagingSigningPubkey: String
+    let messagingSigningPubkeySignature: String
+    let messagingSigningPubkeySignatureVersion: Int
+    let messagingSigningPubkeySignedAt: Int
+}
+
+struct MessagingRegistrationDirectoryV4Payload: Decodable {
+    let mode: String?
+    let proof: String?
+    let issuedAt: Date?
+}
+
 @MainActor
 final class MessageKeyManager {
     static let shared = MessageKeyManager()
@@ -26,6 +43,7 @@ final class MessageKeyManager {
     private let messagingV2PrivateKeyKeychainKeyBase = "split.messaging.v2.privateKey"
     private let messagingSigningPrivateKeyKeychainKeyBase = "split.messaging.v3.signingPrivateKey"
     private let messagingSigningCertificateKeychainKeyBase = "split.messaging.v3.signingCertificate"
+    private let messagingSigningCertificateV4KeychainKeyBase = "split.messaging.v4.signingCertificate"
     private let messagingIdentityDomain = AppConfig.messagingIdentityDomain
     private let selfHealingRotationCooldownSeconds: TimeInterval = 60 * 60 * 12
     private let lightningAddressLookupRetryDelayNanoseconds: UInt64 = 500_000_000
@@ -35,16 +53,20 @@ final class MessageKeyManager {
 
     struct RegistrationResponse: Decodable {
         let ok: Bool
+        let messagingAccountId: String?
         let walletPubkey: String?
         let lightningAddress: String?
+        let lightningAddressHash: String?
+        let lightningAddressHashScheme: String?
         let didUpdate: Bool?
         let didRotate: Bool?
+        let binding: MessagingIdentityBindingPayloadV4?
         let messagingPubkey: String?
         let messagingIdentitySignature: String?
         let messagingIdentitySignatureVersion: Int?
         let messagingIdentitySignedAt: Date?
         let messagingIdentityUpdatedAt: Date?
-        let directory: MessagingDirectoryProofPayload?
+        let directory: MessagingRegistrationDirectoryV4Payload?
         let error: String?
 
         var normalizedLightningAddress: String? {
@@ -72,6 +94,38 @@ final class MessageKeyManager {
             return MessagingIdentityBindingPayload(
                 walletPubkey: walletPubkey,
                 lightningAddress: lightningAddress,
+                messagingPubkey: messagingPubkey,
+                messagingIdentitySignature: messagingIdentitySignature,
+                messagingIdentitySignatureVersion: messagingIdentitySignatureVersion,
+                messagingIdentitySignedAt: Int(messagingIdentitySignedAt.timeIntervalSince1970)
+            )
+        }
+
+        var identityBindingPayloadV4: MessagingIdentityBindingPayloadV4? {
+            if let binding {
+                return binding
+            }
+
+            guard let walletPubkey = walletPubkey?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !walletPubkey.isEmpty,
+                  let lightningAddressHash = lightningAddressHash?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                  !lightningAddressHash.isEmpty,
+                  let lightningAddressHashScheme = lightningAddressHashScheme?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !lightningAddressHashScheme.isEmpty,
+                  let messagingPubkey = messagingPubkey?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !messagingPubkey.isEmpty,
+                  let messagingIdentitySignature = messagingIdentitySignature?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !messagingIdentitySignature.isEmpty,
+                  let messagingIdentitySignatureVersion,
+                  let messagingIdentitySignedAt
+            else {
+                return nil
+            }
+
+            return MessagingIdentityBindingPayloadV4(
+                walletPubkey: walletPubkey,
+                lightningAddressHash: lightningAddressHash,
+                lightningAddressHashScheme: lightningAddressHashScheme,
                 messagingPubkey: messagingPubkey,
                 messagingIdentitySignature: messagingIdentitySignature,
                 messagingIdentitySignatureVersion: messagingIdentitySignatureVersion,
@@ -107,19 +161,19 @@ final class MessageKeyManager {
     }
 
     private enum IdentityEndpoint {
-        case v3
+        case v4
 
         var path: String {
             switch self {
-            case .v3:
-                return "/messaging/v3/identity"
+            case .v4:
+                return "/messaging/v4/identity"
             }
         }
 
         var signatureVersion: Int {
             switch self {
-            case .v3:
-                return 2
+            case .v4:
+                return 4
             }
         }
 
@@ -151,12 +205,14 @@ final class MessageKeyManager {
     private struct LocalIdentity {
         let walletPubkey: String
         let lightningAddress: String
+        let lightningAddressHash: String
         let messagingPubkey: String
     }
 
     private struct MessagingIdentityRegistrationRequest: Encodable {
         let walletPubkey: String
-        let lightningAddress: String
+        let lightningAddressHash: String
+        let lightningAddressHashScheme: String
         let messagingPubkey: String
         let messagingIdentitySignature: String
         let messagingIdentitySignatureVersion: Int
@@ -167,7 +223,7 @@ final class MessageKeyManager {
         authManager: AuthManager,
         walletManager: WalletManager
     ) async throws -> RegistrationResponse {
-        let identityEndpoint: IdentityEndpoint = .v3
+        let identityEndpoint: IdentityEndpoint = .v4
 
         try await authManager.ensureSession(walletManager: walletManager)
 
@@ -193,6 +249,7 @@ final class MessageKeyManager {
         let v2LocalIdentity = LocalIdentity(
             walletPubkey: walletPubkey,
             lightningAddress: lightningAddress,
+            lightningAddressHash: try MessagingPrivacyV4.lightningAddressClientHash(for: lightningAddress),
             messagingPubkey: hexString(for: v2KeyState.privateKey.publicKey.rawRepresentation)
         )
 
@@ -215,6 +272,14 @@ final class MessageKeyManager {
 
     func currentMessagingPrivateKey() throws -> Curve25519.KeyAgreement.PrivateKey {
         try loadOrCreatePrivateKey(for: .v2).privateKey
+    }
+
+    func fetchLocalLightningAddressForV4Send(
+        walletManager: WalletManager
+    ) async throws -> String? {
+        try await fetchLocalLightningAddressWithRetry(walletManager: walletManager)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     func currentMessageSigningCertificate(
@@ -260,6 +325,53 @@ final class MessageKeyManager {
             messagingSigningPubkeySignedAt: signedAt
         )
         try saveSigningCertificate(certificate)
+        return certificate
+    }
+
+    func currentMessageSigningCertificateV4(
+        senderBinding: MessagingIdentityBindingPayloadV4,
+        walletManager: WalletManager
+    ) async throws -> MessageSigningCertificateV4 {
+        let signingKey = try loadOrCreateSigningPrivateKey()
+        let signingPubkey = hexString(for: signingKey.publicKey.rawRepresentation)
+
+        if let certificate = try loadSigningCertificateV4IfPresent(),
+           isSigningCertificateV4Valid(
+            certificate,
+            senderBinding: senderBinding,
+            signingPubkey: signingPubkey
+           ) {
+            return certificate
+        }
+
+        let signedAt = Int(Date().timeIntervalSince1970)
+        let canonicalMessage = MessageKeyBindingVerifier.buildMessagingSigningKeyBindingMessageV4(
+            version: 2,
+            walletPubkey: senderBinding.walletPubkey,
+            lightningAddressHash: senderBinding.lightningAddressHash,
+            messagingPubkey: senderBinding.messagingPubkey,
+            messagingSigningPubkey: signingPubkey,
+            signedAt: signedAt
+        )
+        let signed = try await walletManager.signAuthMessage(canonicalMessage)
+
+        guard signed.pubkey
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() == senderBinding.walletPubkey.lowercased() else {
+            throw MessageKeyError.invalidResponse
+        }
+
+        let certificate = MessageSigningCertificateV4(
+            walletPubkey: senderBinding.walletPubkey,
+            lightningAddressHash: senderBinding.lightningAddressHash,
+            lightningAddressHashScheme: senderBinding.lightningAddressHashScheme,
+            messagingPubkey: senderBinding.messagingPubkey,
+            messagingSigningPubkey: signingPubkey,
+            messagingSigningPubkeySignature: signed.signature,
+            messagingSigningPubkeySignatureVersion: 2,
+            messagingSigningPubkeySignedAt: signedAt
+        )
+        try saveSigningCertificateV4(certificate)
         return certificate
     }
 
@@ -370,6 +482,22 @@ final class MessageKeyManager {
         """
     }
 
+    func buildMessagingIdentityBindingMessageV4(
+        version: Int,
+        walletPubkey: String,
+        lightningAddressHash: String,
+        messagingPubkey: String,
+        signedAt: Int
+    ) -> String {
+        MessageKeyBindingVerifier.buildMessagingIdentityBindingMessageV4(
+            version: version,
+            walletPubkey: walletPubkey,
+            lightningAddressHash: lightningAddressHash,
+            messagingPubkey: messagingPubkey,
+            signedAt: signedAt
+        )
+    }
+
     func buildMessagingSigningKeyBindingMessage(
         version: Int,
         walletPubkey: String,
@@ -432,15 +560,16 @@ final class MessageKeyManager {
             localIdentity = LocalIdentity(
                 walletPubkey: localIdentity.walletPubkey,
                 lightningAddress: localIdentity.lightningAddress,
+                lightningAddressHash: localIdentity.lightningAddressHash,
                 messagingPubkey: hexString(for: rotatedPrivateKey.publicKey.rawRepresentation)
             )
         }
 
         let signedAt = Int(Date().timeIntervalSince1970)
-        let canonicalMessage = buildMessagingIdentityBindingMessage(
+        let canonicalMessage = buildMessagingIdentityBindingMessageV4(
             version: endpoint.signatureVersion,
             walletPubkey: localIdentity.walletPubkey,
-            lightningAddress: localIdentity.lightningAddress,
+            lightningAddressHash: localIdentity.lightningAddressHash,
             messagingPubkey: localIdentity.messagingPubkey,
             signedAt: signedAt
         )
@@ -457,7 +586,8 @@ final class MessageKeyManager {
             to: endpoint,
             requestBody: MessagingIdentityRegistrationRequest(
                 walletPubkey: signed.pubkey,
-                lightningAddress: localIdentity.lightningAddress,
+                lightningAddressHash: localIdentity.lightningAddressHash,
+                lightningAddressHashScheme: MessagingPrivacyV4.lightningAddressClientHashScheme,
                 messagingPubkey: localIdentity.messagingPubkey,
                 messagingIdentitySignature: signed.signature,
                 messagingIdentitySignatureVersion: endpoint.signatureVersion,
@@ -494,7 +624,7 @@ final class MessageKeyManager {
             throw MessageKeyError.missingLightningAddress
         }
 
-        let endpoint: IdentityEndpoint = .v3
+        let endpoint: IdentityEndpoint = .v4
         let rotatedPrivateKey = Curve25519.KeyAgreement.PrivateKey()
         savePrivateKey(rotatedPrivateKey, for: .v2)
         clearSigningMaterial()
@@ -502,13 +632,14 @@ final class MessageKeyManager {
         let localIdentity = LocalIdentity(
             walletPubkey: walletPubkey,
             lightningAddress: lightningAddress,
+            lightningAddressHash: try MessagingPrivacyV4.lightningAddressClientHash(for: lightningAddress),
             messagingPubkey: hexString(for: rotatedPrivateKey.publicKey.rawRepresentation)
         )
         let signedAt = Int(Date().timeIntervalSince1970)
-        let canonicalMessage = buildMessagingIdentityBindingMessage(
+        let canonicalMessage = buildMessagingIdentityBindingMessageV4(
             version: endpoint.signatureVersion,
             walletPubkey: localIdentity.walletPubkey,
-            lightningAddress: localIdentity.lightningAddress,
+            lightningAddressHash: localIdentity.lightningAddressHash,
             messagingPubkey: localIdentity.messagingPubkey,
             signedAt: signedAt
         )
@@ -524,7 +655,8 @@ final class MessageKeyManager {
             to: endpoint,
             requestBody: MessagingIdentityRegistrationRequest(
                 walletPubkey: signed.pubkey,
-                lightningAddress: localIdentity.lightningAddress,
+                lightningAddressHash: localIdentity.lightningAddressHash,
+                lightningAddressHashScheme: MessagingPrivacyV4.lightningAddressClientHashScheme,
                 messagingPubkey: localIdentity.messagingPubkey,
                 messagingIdentitySignature: signed.signature,
                 messagingIdentitySignatureVersion: endpoint.signatureVersion,
@@ -640,17 +772,18 @@ final class MessageKeyManager {
         for endpoint: IdentityEndpoint,
         localIdentity: LocalIdentity
     ) -> Bool {
-        guard let binding = response.identityBindingPayload,
+        guard let binding = response.identityBindingPayloadV4,
               binding.messagingIdentitySignatureVersion == endpoint.signatureVersion,
               binding.walletPubkey.lowercased() == localIdentity.walletPubkey.lowercased(),
-              binding.lightningAddress == localIdentity.lightningAddress,
+              binding.lightningAddressHash == localIdentity.lightningAddressHash,
+              binding.lightningAddressHashScheme == MessagingPrivacyV4.lightningAddressClientHashScheme,
               binding.messagingPubkey == localIdentity.messagingPubkey
         else {
             return false
         }
 
         do {
-            try MessageKeyBindingVerifier.verifyBinding(binding)
+            try MessageKeyBindingVerifier.verifyBindingV4(binding)
             return true
         } catch {
             return false
@@ -826,6 +959,29 @@ final class MessageKeyManager {
         KeychainHelper.save(encoded, forKey: preferredSigningCertificateKeychainKey())
     }
 
+    private func loadSigningCertificateV4IfPresent() throws -> MessageSigningCertificateV4? {
+        let key = preferredSigningCertificateV4KeychainKey()
+        guard let stored = KeychainHelper.read(forKey: key),
+              let data = stored.data(using: .utf8) else {
+            return nil
+        }
+
+        do {
+            return try JSONDecoder().decode(MessageSigningCertificateV4.self, from: data)
+        } catch {
+            KeychainHelper.delete(forKey: key)
+            return nil
+        }
+    }
+
+    private func saveSigningCertificateV4(_ certificate: MessageSigningCertificateV4) throws {
+        let data = try JSONEncoder().encode(certificate)
+        guard let encoded = String(data: data, encoding: .utf8) else {
+            throw MessageKeyError.invalidStoredKey
+        }
+        KeychainHelper.save(encoded, forKey: preferredSigningCertificateV4KeychainKey())
+    }
+
     private func isSigningCertificateValid(
         _ certificate: MessageSigningCertificate,
         senderBinding: MessagingIdentityBindingPayload,
@@ -841,6 +997,28 @@ final class MessageKeyManager {
 
         do {
             try MessageKeyBindingVerifier.verifyMessagingSigningCertificate(certificate)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func isSigningCertificateV4Valid(
+        _ certificate: MessageSigningCertificateV4,
+        senderBinding: MessagingIdentityBindingPayloadV4,
+        signingPubkey: String
+    ) -> Bool {
+        guard certificate.walletPubkey.lowercased() == senderBinding.walletPubkey.lowercased(),
+              certificate.lightningAddressHash == senderBinding.lightningAddressHash,
+              certificate.lightningAddressHashScheme == senderBinding.lightningAddressHashScheme,
+              certificate.messagingPubkey == senderBinding.messagingPubkey,
+              certificate.messagingSigningPubkey.lowercased() == signingPubkey.lowercased(),
+              certificate.messagingSigningPubkeySignatureVersion == 2 else {
+            return false
+        }
+
+        do {
+            try MessageKeyBindingVerifier.verifyMessagingSigningCertificateV4(certificate)
             return true
         } catch {
             return false
@@ -910,6 +1088,10 @@ final class MessageKeyManager {
         "\(messagingSigningCertificateKeychainKeyBase).\(AppConfig.messagingPushEnvironment)"
     }
 
+    private func preferredSigningCertificateV4KeychainKey() -> String {
+        "\(messagingSigningCertificateV4KeychainKeyBase).\(AppConfig.messagingPushEnvironment)"
+    }
+
     private func readableSigningCertificateKeychainKeys() -> [String] {
         [
             preferredSigningCertificateKeychainKey()
@@ -920,7 +1102,10 @@ final class MessageKeyManager {
         [
             messagingSigningCertificateKeychainKeyBase,
             "\(messagingSigningCertificateKeychainKeyBase).dev",
-            "\(messagingSigningCertificateKeychainKeyBase).prod"
+            "\(messagingSigningCertificateKeychainKeyBase).prod",
+            messagingSigningCertificateV4KeychainKeyBase,
+            "\(messagingSigningCertificateV4KeychainKeyBase).dev",
+            "\(messagingSigningCertificateV4KeychainKeyBase).prod"
         ]
     }
 

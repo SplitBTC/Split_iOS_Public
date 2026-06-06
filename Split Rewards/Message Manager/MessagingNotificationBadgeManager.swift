@@ -15,13 +15,16 @@ final class MessagingNotificationBadgeManager {
 
     private init() {}
 
-    func syncUnreadMessageCount(_ unreadCount: Int) {
+    func syncUnreadMessageCount(
+        _ unreadCount: Int,
+        allowLoweringWhileInactive: Bool = false
+    ) {
         let badgeCount = max(0, unreadCount)
         let application = UIApplication.shared
         let currentBadgeCount = cachedBadgeCount
 
         let resolvedBadgeCount: Int
-        if application.applicationState == .active {
+        if application.applicationState == .active || allowLoweringWhileInactive {
             resolvedBadgeCount = badgeCount
         } else {
             // While the app is backgrounded, never lower the visible badge count from a

@@ -415,7 +415,7 @@ struct ContactDetailView: View {
             contact: WalletManager.WalletContact(
                 id: "1",
                 name: "Alice",
-                paymentIdentifier: "alice@example.com",
+                paymentIdentifier: "alice@\(AppConfig.lightningAddressDomain)",
                 createdAt: .now,
                 updatedAt: .now
             )

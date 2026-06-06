@@ -171,6 +171,15 @@ final class MessageSyncManager {
             authManager: authManager,
             walletManager: walletManager
         )
+        let localRegistration = try await MessageKeyManager.shared.ensureRegistered(
+            authManager: authManager,
+            walletManager: walletManager
+        )
+        guard let localRecipientBindingV4 = localRegistration.identityBindingPayloadV4 else {
+            throw MessageKeyManager.MessageKeyError.invalidResponse
+        }
+        let localLightningAddress = try await MessageKeyManager.shared
+            .fetchLocalLightningAddressForV4Send(walletManager: walletManager)
 
         var decryptedMessages: [StoredMessage] = []
         var failedCount = 0
@@ -179,7 +188,32 @@ final class MessageSyncManager {
         for inboxMessage in inboxMessages {
             do {
                 let storedMessage: StoredMessage
-                if inboxMessage.envelopeVersion >= 3 {
+                if inboxMessage.envelopeVersion >= 4 {
+                    let sealedPayload = try decryptSealedPayloadV4(for: inboxMessage)
+                    try MessageKeyBindingVerifier.verifySealedIncomingEnvelopeV4(
+                        inboxMessage,
+                        sealedPayload: sealedPayload,
+                        recipientBinding: localRecipientBindingV4
+                    )
+                    storedMessage = StoredMessage(
+                        id: inboxMessage.id,
+                        conversationId: sealedPayload.sender.walletPubkey,
+                        clientMessageId: inboxMessage.clientMessageId,
+                        body: sealedPayload.body,
+                        createdAt: inboxMessage.createdAtClient ?? inboxMessage.createdAt ?? Date(),
+                        isIncoming: true,
+                        isRead: false,
+                        senderWalletPubkey: sealedPayload.sender.walletPubkey,
+                        senderMessagingPubkey: sealedPayload.sender.messagingPubkey,
+                        senderLightningAddress: try? MessagingPrivacyV4.normalizeLightningAddress(
+                            sealedPayload.senderLightningAddress
+                        ),
+                        recipientWalletPubkey: localRecipientBindingV4.walletPubkey,
+                        recipientMessagingPubkey: inboxMessage.recipientMessagingPubkey,
+                        recipientLightningAddress: localLightningAddress ?? "",
+                        messageType: inboxMessage.messageType
+                    )
+                } else if inboxMessage.envelopeVersion >= 3 {
                     let sealedPayload = try decryptSealedPayload(for: inboxMessage)
                     try MessageKeyBindingVerifier.verifySealedIncomingEnvelope(
                         inboxMessage,
@@ -196,9 +230,9 @@ final class MessageSyncManager {
                         senderWalletPubkey: sealedPayload.sender.walletPubkey,
                         senderMessagingPubkey: sealedPayload.sender.messagingPubkey,
                         senderLightningAddress: sealedPayload.sender.lightningAddress,
-                        recipientWalletPubkey: inboxMessage.recipientWalletPubkey,
+                        recipientWalletPubkey: inboxMessage.recipientWalletPubkey ?? "",
                         recipientMessagingPubkey: inboxMessage.recipientMessagingPubkey,
-                        recipientLightningAddress: inboxMessage.recipientLightningAddress,
+                        recipientLightningAddress: inboxMessage.recipientLightningAddress ?? "",
                         messageType: inboxMessage.messageType
                     )
                 } else {
@@ -206,18 +240,18 @@ final class MessageSyncManager {
                     let plaintext = try MessageCryptoManager.shared.decrypt(inboxMessage)
                     storedMessage = StoredMessage(
                         id: inboxMessage.id,
-                        conversationId: inboxMessage.senderWalletPubkey,
+                        conversationId: inboxMessage.senderWalletPubkey ?? "",
                         clientMessageId: inboxMessage.clientMessageId,
                         body: plaintext,
                         createdAt: inboxMessage.createdAtClient ?? inboxMessage.createdAt ?? Date(),
                         isIncoming: true,
                         isRead: false,
-                        senderWalletPubkey: inboxMessage.senderWalletPubkey,
+                        senderWalletPubkey: inboxMessage.senderWalletPubkey ?? "",
                         senderMessagingPubkey: inboxMessage.senderMessagingPubkey,
                         senderLightningAddress: inboxMessage.senderLightningAddress,
-                        recipientWalletPubkey: inboxMessage.recipientWalletPubkey,
+                        recipientWalletPubkey: inboxMessage.recipientWalletPubkey ?? "",
                         recipientMessagingPubkey: inboxMessage.recipientMessagingPubkey,
-                        recipientLightningAddress: inboxMessage.recipientLightningAddress,
+                        recipientLightningAddress: inboxMessage.recipientLightningAddress ?? "",
                         messageType: inboxMessage.messageType
                     )
                 }
@@ -412,6 +446,17 @@ final class MessageSyncManager {
         }
 
         return try JSONDecoder().decode(SealedSenderMessagePayload.self, from: sealedPayloadData)
+    }
+
+    private func decryptSealedPayloadV4(
+        for message: InboxMessage
+    ) throws -> SealedSenderMessagePayloadV4 {
+        let sealedPayloadString = try MessageCryptoManager.shared.decrypt(message)
+        guard let sealedPayloadData = sealedPayloadString.data(using: .utf8) else {
+            throw MessageCryptoManager.MessageCryptoError.invalidPlaintext
+        }
+
+        return try JSONDecoder().decode(SealedSenderMessagePayloadV4.self, from: sealedPayloadData)
     }
 
     private func serverRecoveryFailureReason(for error: Error) -> InboxRecoveryFailureReason? {

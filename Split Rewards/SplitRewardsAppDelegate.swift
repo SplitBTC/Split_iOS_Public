@@ -74,11 +74,8 @@ final class SplitRewardsAppDelegate: NSObject, UIApplicationDelegate, UNUserNoti
             return
         }
 
-        if MessageThreadPresenceTracker.shared.shouldSuppressNotification(
-            for: extractConversationId(from: userInfo)
-        ) {
-            completionHandler([.sound])
-            return
+        Task { @MainActor in
+            _ = await MessagingPushSyncCoordinator.shared.handleIncomingMessagePush()
         }
 
         completionHandler([.banner, .list, .sound, .badge])
