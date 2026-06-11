@@ -286,14 +286,19 @@ enum MessagingBlockAPI {
         walletManager: WalletManager
     ) async throws -> Data {
         try await authManager.ensureSession(walletManager: walletManager)
+        var authenticatedRequest = request
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &authenticatedRequest,
+            walletManager: walletManager
+        )
 
-        var (data, response) = try await URLSession.shared.data(for: request)
+        var (data, response) = try await URLSession.shared.data(for: authenticatedRequest)
 
         if let http = response as? HTTPURLResponse,
            http.statusCode == 401 || http.statusCode == 403 {
             authManager.invalidateSession()
             try await authManager.ensureSession(walletManager: walletManager)
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await URLSession.shared.data(for: authenticatedRequest)
         }
 
         guard let http = response as? HTTPURLResponse else {

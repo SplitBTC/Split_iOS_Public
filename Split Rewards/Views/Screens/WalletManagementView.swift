@@ -526,6 +526,19 @@ private struct DeleteRewardsAccountConfirmView: View {
 }
 
 private enum RewardsAccountDeletionAPI {
+    private struct DeleteNonceResponse: Decodable {
+        let nonce: String
+        let expiresAt: String?
+        let messageToSign: String
+        let purpose: String?
+    }
+
+    private struct SignedDeleteRequest: Encodable {
+        let walletPubkey: String
+        let nonce: String
+        let signature: String
+    }
+
     @MainActor
     static func deleteRewardsAccount(
         authManager: AuthManager,
@@ -533,7 +546,50 @@ private enum RewardsAccountDeletionAPI {
     ) async throws {
         try await authManager.ensureSession(walletManager: walletManager)
 
-        guard let url = URL(string: "\(AppConfig.baseURL)/v1/account/delete") else {
+        let nonceResponse = try await fetchDeleteNonce(
+            authManager: authManager,
+            walletManager: walletManager
+        )
+        let signed = try await walletManager.signAuthMessage(nonceResponse.messageToSign)
+
+        try await submitSignedDelete(
+            walletPubkey: signed.pubkey,
+            nonce: nonceResponse.nonce,
+            signature: signed.signature
+        )
+    }
+
+    @MainActor
+    private static func fetchDeleteNonce(
+        authManager: AuthManager,
+        walletManager: WalletManager
+    ) async throws -> DeleteNonceResponse {
+        var (data, response) = try await sendDeleteNonceRequest()
+
+        if let http = response as? HTTPURLResponse,
+           http.statusCode == 401 || http.statusCode == 403 {
+            authManager.invalidateSession()
+            try await authManager.ensureSession(walletManager: walletManager)
+            (data, response) = try await sendDeleteNonceRequest()
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            throw serverError(data: data, statusCode: http.statusCode, fallback: "Account deletion nonce failed")
+        }
+
+        guard let decoded = try? JSONDecoder().decode(DeleteNonceResponse.self, from: data) else {
+            throw URLError(.badServerResponse)
+        }
+
+        return decoded
+    }
+
+    private static func sendDeleteNonceRequest() async throws -> (Data, URLResponse) {
+        guard let url = URL(string: "\(AppConfig.baseURL)/v2/account/delete/nonce") else {
             throw URLError(.badURL)
         }
 
@@ -544,30 +600,51 @@ private enum RewardsAccountDeletionAPI {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = Data("{}".utf8)
 
-        var (data, response) = try await URLSession.shared.data(for: request)
+        return try await URLSession.shared.data(for: request)
+    }
 
-        if let http = response as? HTTPURLResponse,
-           http.statusCode == 401 || http.statusCode == 403 {
-            authManager.invalidateSession()
-            try await authManager.ensureSession(walletManager: walletManager)
-            (data, response) = try await URLSession.shared.data(for: request)
+    private static func submitSignedDelete(
+        walletPubkey: String,
+        nonce: String,
+        signature: String
+    ) async throws {
+        guard let url = URL(string: "\(AppConfig.baseURL)/v2/account/delete") else {
+            throw URLError(.badURL)
         }
 
+        let body = SignedDeleteRequest(
+            walletPubkey: walletPubkey,
+            nonce: nonce,
+            signature: signature
+        )
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpShouldHandleCookies = true
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
 
         guard (200...299).contains(http.statusCode) else {
-            let raw = String(data: data, encoding: .utf8) ?? ""
-            throw NSError(
-                domain: "RewardsAccountDeletionAPI",
-                code: http.statusCode,
-                userInfo: [
-                    NSLocalizedDescriptionKey: raw.isEmpty
-                        ? "Server error (HTTP \(http.statusCode))"
-                        : "Server error (HTTP \(http.statusCode)): \(raw)"
-                ]
-            )
+            throw serverError(data: data, statusCode: http.statusCode, fallback: "Account deletion failed")
         }
+    }
+
+    private static func serverError(data: Data, statusCode: Int, fallback: String) -> Error {
+        let raw = String(data: data, encoding: .utf8) ?? ""
+        return NSError(
+            domain: "RewardsAccountDeletionAPI",
+            code: statusCode,
+            userInfo: [
+                NSLocalizedDescriptionKey: raw.isEmpty
+                    ? "\(fallback) (HTTP \(statusCode))"
+                    : "\(fallback) (HTTP \(statusCode)): \(raw)"
+            ]
+        )
     }
 }

@@ -555,7 +555,7 @@ final class SparkSubwalletManager: ObservableObject {
         let apiKey = try await getBreezApiKey()
         var config = defaultConfig(network: .mainnet)
         config.apiKey = apiKey
-        config.lnurlDomain = AppConfig.lightningAddressDomain
+        config.lnurlDomain = "example.com"
         config.privateEnabledDefault = true
 
         let storageDir = try store.createStorageDirectory(named: storageDirectoryName).path

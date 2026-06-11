@@ -48,17 +48,6 @@ struct HeaderView: View {
                         )
                 }
 
-                NavigationLink(destination: BitcoinEventsView()) {
-                    Image(systemName: "globe")
-                        .font(.title2.weight(.semibold))
-                        .foregroundColor(.white)
-                        .padding(10)
-                        .background(
-                            Circle()
-                                .fill(Color.black.opacity(0.9))
-                        )
-                }
-
                 // Right: Profile icon → ProfileView
                 NavigationLink(destination: ProfileView()) {
                     Image(systemName: "line.3.horizontal")

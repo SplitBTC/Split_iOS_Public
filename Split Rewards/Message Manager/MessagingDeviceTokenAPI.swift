@@ -119,6 +119,7 @@ enum MessagingDeviceTokenAPI {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(walletPubkey, forHTTPHeaderField: MessagingAuthenticatedWalletHeader.name)
         request.httpBody = try JSONEncoder().encode(
             RequestBody(
                 walletPubkey: signed.pubkey,

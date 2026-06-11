@@ -55,22 +55,4 @@ struct AppConfig {
         return "prod"
     }()
 
-    static let sharedAppGroupIdentifier = requiredConfigValue("SplitAppGroupIdentifier")
-    static let sharedKeychainAccessGroup = requiredConfigValue("SplitSharedKeychainAccessGroup")
-    static let keychainService = requiredConfigValue("SplitKeychainService")
-    static let messagingIdentityDomain = requiredConfigValue("SplitMessagingIdentityDomain")
-    static let lightningAddressDomain = requiredConfigValue("SplitLightningAddressDomain")
-
-    private static func requiredConfigValue(_ key: String) -> String {
-        guard let rawValue = Bundle.main.object(forInfoDictionaryKey: key) as? String else {
-            preconditionFailure("\(key) is missing from the app configuration.")
-        }
-
-        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else {
-            preconditionFailure("\(key) is empty in the app configuration.")
-        }
-
-        return value
-    }
 }

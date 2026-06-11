@@ -231,7 +231,7 @@ extension WalletManager {
 
         var config = defaultConfig(network: .mainnet)
         config.apiKey = apiKey
-        config.lnurlDomain = AppConfig.lightningAddressDomain
+        config.lnurlDomain = "example.com"
         config.privateEnabledDefault = true
 
         let hadExistingStorage = hasExistingBreezStorageDirectory()

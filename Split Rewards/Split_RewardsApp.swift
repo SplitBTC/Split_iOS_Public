@@ -116,7 +116,6 @@ struct Split_RewardsApp: App {
                     }
                 }
                 .task {
-                    ShareExtensionDataCleanup.runIfNeeded()
                     checkAppVersion()
                     walletManager.toastManager = toastManager
                     lndWalletManager.toastManager = toastManager

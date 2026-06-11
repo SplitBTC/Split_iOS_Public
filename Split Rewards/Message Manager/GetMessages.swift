@@ -128,6 +128,10 @@ enum MessagesInboxAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.httpShouldHandleCookies = true
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
 
         var (data, response) = try await URLSession.shared.data(for: request)
 

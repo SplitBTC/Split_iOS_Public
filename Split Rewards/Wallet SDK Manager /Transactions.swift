@@ -126,7 +126,6 @@ extension WalletManager {
     /// Convert Breez Spark `Payment` models into UI-friendly rows.
     ///
     /// In Spark, `Payment.fees` is the canonical fee field for the payment row regardless of method.
-    /// For on-chain deposits, this should reflect the fee paid once the deposit is claimed/processed.
     func transactionRow(from payment: Payment) -> TransactionRow {
         let (direction, amountSats) = paymentDirectionAndAmount(payment)
         let feeSats = paymentFeeSats(payment)

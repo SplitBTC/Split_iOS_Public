@@ -122,6 +122,10 @@ enum MessageAttachmentUploadAPI {
         request.httpShouldHandleCookies = true
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
         request.httpBody = makeMultipartBody(
             fileData: fileData,
             fileName: fileName,
@@ -267,6 +271,10 @@ enum MessageAttachmentDownloadAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.httpShouldHandleCookies = true
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
 
         var (data, response) = try await URLSession.shared.data(for: request)
 
@@ -315,6 +323,10 @@ enum MessageAttachmentReceiptAPI {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
         request.httpBody = try JSONEncoder().encode(RequestBody(attachmentIds: attachmentIds))
 
         var (data, response) = try await URLSession.shared.data(for: request)

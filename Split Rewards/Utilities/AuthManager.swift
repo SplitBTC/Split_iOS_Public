@@ -295,8 +295,6 @@ final class AuthManager: ObservableObject {
             sparkAddress: sparkAddress
         )
 
-        print("📤 Sending wallet-login with sparkAddress:", sparkAddress)
-
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.httpShouldHandleCookies = true
@@ -327,5 +325,4 @@ final class AuthManager: ObservableObject {
         return AuthError.serverRejected("\(fallback) (HTTP \(status))")
     }
 }
-
 

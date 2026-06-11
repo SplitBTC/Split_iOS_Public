@@ -178,7 +178,7 @@ struct CreateContactView: View {
 
 #Preview {
     NavigationStack {
-        CreateContactView(paymentIdentifier: "alice@\(AppConfig.lightningAddressDomain)")
+        CreateContactView(paymentIdentifier: "alice@example.com")
             .environmentObject(WalletManager())
     }
 }

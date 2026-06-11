@@ -43,6 +43,18 @@ enum MessagingPrivacyV4 {
     }
 }
 
+enum MessagingAuthenticatedWalletHeader {
+    static let name = "X-Split-Wallet-Pubkey"
+
+    @MainActor
+    static func apply(to request: inout URLRequest, walletManager: WalletManager) async throws {
+        let walletPubkey = try await MessageKeyManager.shared.currentWalletPubkey(
+            walletManager: walletManager
+        )
+        request.setValue(walletPubkey, forHTTPHeaderField: name)
+    }
+}
+
 struct MessagingIdentityBindingPayload: Codable, Hashable {
     let walletPubkey: String
     let lightningAddress: String
@@ -152,8 +164,8 @@ enum MessageKeyBindingVerifier {
     private static let messagingIdentityV4SignatureVersion = 4
     private static let supportedEnvelopeSignatureVersions: Set<Int> = [1, 2]
     private static let messagingEnvelopeV4SignatureVersion = 3
-    private static let messagingIdentityDomain = AppConfig.messagingIdentityDomain
-    private static let messagingIdentityV4Domain = "splitrewards.messaging"
+    private static let messagingIdentityDomain = "example.invalid"
+    private static let messagingIdentityV4Domain = "example.messaging"
 
     enum VerificationError: LocalizedError {
         case missingBinding

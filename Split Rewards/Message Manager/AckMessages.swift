@@ -83,6 +83,10 @@ enum AckMessagesAPI {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
         request.httpBody = try JSONEncoder().encode(["messageIds": messageIds])
 
         var (data, response) = try await URLSession.shared.data(for: request)
@@ -141,6 +145,10 @@ enum RekeyMessagesAPI {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
         request.httpBody = try JSONEncoder().encode(["messageIds": messageIds])
 
         var (data, response) = try await URLSession.shared.data(for: request)
@@ -205,6 +213,10 @@ enum DecryptFailedMessagesAPI {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
         struct RequestBody: Encodable {
             let messageIds: [String]
             let failureReasons: [String: String]
@@ -277,6 +289,10 @@ enum OutgoingMessageStatusesAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.httpShouldHandleCookies = true
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
 
         var (data, response) = try await URLSession.shared.data(for: request)
 

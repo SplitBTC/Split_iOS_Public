@@ -36,7 +36,7 @@ struct ComposeMessage: View {
     private let composerSurface = Color.white.opacity(0.08)
     private let bottomBarSurface = Color.splitCardSurface
     private let separator = Color.white.opacity(0.08)
-    private let lightningDomainSuffix = "@\(AppConfig.lightningAddressDomain)"
+    private let lightningDomainSuffix = "@example.com"
 
     let onSent: ((MessageSendResult) -> Void)?
 
@@ -930,7 +930,7 @@ private extension ComposeMessage {
             guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
                 return nil
             }
-            normalized = "\(trimmed)@\(AppConfig.lightningAddressDomain)"
+            normalized = "\(trimmed)@example.com"
         }
 
         let pieces = normalized.split(separator: "@", omittingEmptySubsequences: false)

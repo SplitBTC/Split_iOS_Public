@@ -7,8 +7,7 @@ This app includes:
 - self-custodial Bitcoin wallet flows
 - Lightning address management
 - Split messaging
-- rewards, coupons, merchant discovery, and Bitcoin event flows
-- external Lightning node and Nostr Wallet Connect flows
+- rewards and merchant discovery flows
 
 ## Why This Project Exists
 
@@ -20,11 +19,9 @@ That document explains the core thesis behind Split: Bitcoin should be usable as
 
 ## Repo Status
 
-This is a real iOS app project, not a sample app.
+This repo is being prepared for public release.
 
-This public repository exists for transparency and source availability. Active development may occur privately before released code is synced here. Pull requests may not be reviewed or merged.
-
-Outside developers should treat this as production code with public-repo hygiene requirements.
+It is a real iOS app project, not a sample app. Some infrastructure assumptions still point at Split-hosted services by default, so outside contributors should treat this as production code with public-repo hygiene requirements.
 
 ## Requirements
 
@@ -53,11 +50,8 @@ Test targets live in:
 The app uses automatic signing in the project file. If you are building under your own Apple account, you will probably need to:
 
 - set your own development team
-- adjust the bundle identifiers if needed
-- replace the placeholder shared app-group and shared keychain identifiers
+- adjust the bundle identifier if needed
 - use your own signing configuration for device/archive builds
-
-This public snapshot includes the main app and the test targets.
 
 ## Backend Configuration
 
@@ -75,26 +69,12 @@ Private local overrides can be created from:
 
 Those local override files are gitignored.
 
-Set backend and messaging config with:
+Set backend config with:
 
 - `BASE_SCHEME`
 - `BASE_HOST`
-- `MESSAGING_PUSH_ENV`
-- `MESSAGING_IDENTITY_DOMAIN`
-- `LIGHTNING_ADDRESS_DOMAIN`
 
-The main app reads these values in [AppConfig.swift](./Split%20Rewards/Utilities/AppConfig.swift).
-
-The public project also uses placeholder values for:
-
-- shared app-group identifier
-- shared keychain access group
-- keychain service namespace
-- messaging identity domain
-- Lightning address domain
-- public support/contact examples
-
-Those values are intentionally public-safe in this repository and should be replaced with your own app identifiers for real signed builds.
+The app reads the configured base URL in [AppConfig.swift](./Split%20Rewards/Utilities/AppConfig.swift).
 
 If you are not an authorized developer working against Split infrastructure, point the app at your own backend before using it as a development client.
 
@@ -104,11 +84,6 @@ If you are not an authorized developer working against Split infrastructure, poi
 - [Utilities/AppConfig.swift](./Split%20Rewards/Utilities/AppConfig.swift): backend base URL selection
 - [Message Manager](./Split%20Rewards/Message%20Manager): messaging key management, crypto, sync, and storage
 - [Wallet SDK Manager ](./Split%20Rewards/Wallet%20SDK%20Manager%20): wallet lifecycle and seed handling
-- [NWC Wallet Manager](./Split%20Rewards/NWC%20Wallet%20Manager): Nostr Wallet Connect support
-- [LND Wallet Manager](./Split%20Rewards/LND%20Wallet%20Manager): remote LND node support
-- [Core Lightning Wallet Manager](./Split%20Rewards/Core%20Lightning%20Wallet%20Manager): remote Core Lightning node support
-- [Eclair Wallet Manager](./Split%20Rewards/Eclair%20Wallet%20Manager): remote Eclair node support
-- [Spark Subwallet Manager](./Split%20Rewards/Spark%20Subwallet%20Manager): Spark subwallet support
 - [Views](./Split%20Rewards/Views): app screens and sheets
 
 ## Testing
@@ -125,6 +100,7 @@ Run tests from Xcode using the normal test action for the project.
 The messaging trust/privacy writeup lives here:
 
 - [MESSAGING_PRIVACY_AND_TRUST.md](./MESSAGING_PRIVACY_AND_TRUST.md)
+- [IOS_MESSAGING_V4_BUILD_PLAN.md](./IOS_MESSAGING_V4_BUILD_PLAN.md)
 
 That document is intentionally technical and conservative in scope.
 

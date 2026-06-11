@@ -44,7 +44,7 @@ final class MessageKeyManager {
     private let messagingSigningPrivateKeyKeychainKeyBase = "split.messaging.v3.signingPrivateKey"
     private let messagingSigningCertificateKeychainKeyBase = "split.messaging.v3.signingCertificate"
     private let messagingSigningCertificateV4KeychainKeyBase = "split.messaging.v4.signingCertificate"
-    private let messagingIdentityDomain = AppConfig.messagingIdentityDomain
+    private let messagingIdentityDomain = "example.invalid"
     private let selfHealingRotationCooldownSeconds: TimeInterval = 60 * 60 * 12
     private let lightningAddressLookupRetryDelayNanoseconds: UInt64 = 500_000_000
     private let lightningAddressLookupMaxAttempts = 4
@@ -691,6 +691,10 @@ final class MessageKeyManager {
         request.httpMethod = "GET"
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
 
         var (data, response) = try await URLSession.shared.data(for: request)
 
@@ -728,6 +732,7 @@ final class MessageKeyManager {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(requestBody.walletPubkey, forHTTPHeaderField: MessagingAuthenticatedWalletHeader.name)
         request.httpBody = try JSONEncoder().encode(requestBody)
 
         var (data, response) = try await URLSession.shared.data(for: request)

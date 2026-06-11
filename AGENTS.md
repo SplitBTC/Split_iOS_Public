@@ -1,120 +1,98 @@
-# Split Rewards Public AGENTS.md
+# Split Rewards AGENTS.md
 
 ## Optional Internal Context
 
-- Internal Split agents with access to the full project folder may also review `PROJECT_MAP_INTERNAL.md` at the project root for cross-repo context.
-- External or public-only review agents should ignore that file. This repo's `AGENTS.md` is the complete repo-local guidance.
+- Internal Split agents with access to the full project folder should also review `PROJECT_MAP_INTERNAL.md` at the project root for cross-repo context.
+- That file is supplemental only. This repo's `AGENTS.md` must remain sufficient on its own.
 
 ## Repo Role
 
-This is the public iOS repository for Split.
+This is the primary live mobile client for Split.
 
-- It exists for inspection, transparency, and community scrutiny.
-- It is not the primary day-to-day development repo.
-- It may intentionally lag behind the private `Split Rewards` repo.
-- It should represent a public-safe snapshot of the production iOS app when the user chooses to sync it.
-
-## Intended Consumers
-
-This file is for both implementation agents and review agents.
-
-- Use it to understand what this repo is for before proposing changes or filing review findings.
-- Do not treat this repo like the private source-of-truth iOS repo unless explicitly instructed.
+- It is the production iOS app currently live in the App Store.
+- New feature work should usually begin here first.
+- It is the product and behavior reference for `Split Android` unless the user explicitly says otherwise.
 
 ## System Relationships
 
-- Private iOS development happens in `Split Rewards`.
-- This repo is a public publication target for iOS code that is ready to be exposed.
-- `Split Backend Public` plays the same role for the backend.
-- A public Android repo is planned later and should follow the same publication model.
+- `Split Rewards` is served by the `Split` backend.
+- Backend API changes must preserve compatibility for released iOS builds.
+- `Split Android` should follow this repo for product behavior and backend contract usage after iOS changes are stable.
 
 ## Non-Negotiable Rules
 
-- This repo must always be open-source ready.
-- Do not assume this repo should always mirror the private iOS repo.
-- Only sync code here when the user wants the public repo updated to a production-ready snapshot.
-- Treat every push to `main` as an immediate public release.
-- There is no dev branch safety net here. If a change is not ready for public exposure, it does not belong in this repo.
-- This repo is not primarily for outside contributions. Its main purpose is transparency, inspection, and scrutiny.
-- Never launch iOS simulators from this machine. The user tests manually on physical devices.
+- Never assume the backend can take a breaking change in place. Coordinate versioned backend endpoints when contracts need to change.
+- Treat this repo as the lead client for new feature development.
+- Keep backend URL configuration in xcconfig files and `Utilities/AppConfig.swift`; do not hardcode environment URLs in random Swift files.
+- Never launch iOS simulators from this machine. The user tests manually on physical devices. Building, static review, and non-simulator verification are fine.
+- Do not commit wallet seeds, private signing material, provisioning assets, or local-only config.
+- File headers and generated page headers must never say `Created by Codex`; always use `Created by TeeVee`.
 
-## Review Posture
+## Current Status
 
-If you are reviewing this repo:
-
-- Judge it as a public publication target, not as the main active development repo.
-- Do not assume that a difference from the private iOS repo is automatically a bug.
-- Do flag anything that weakens public transparency, public safety, or the coherence of the published snapshot.
-- Prioritize findings around secrets, signing material, internal-only docs, misleading README/config guidance, or a snapshot that is obviously incomplete or inconsistent.
-- Treat "this repo is behind private development" as expected unless the user says the public mirror should already include newer work.
-
-## Public Release Rules
-
-- Before publishing here, check for wallet seeds, signing assets, provisioning material, private support docs, internal notes, and local-only config.
-- Keep backend configuration public-safe through xcconfig defaults and example local overrides.
-- Keep bundle identifiers, app-group identifiers, keychain access groups, messaging/lightning placeholder domains, support/contact examples, and development-team settings public-safe unless the user explicitly chooses otherwise.
-- Make sure README and public docs accurately describe the repo’s public role and limitations.
-- If private repo features are incomplete, experimental, or not ready for public scrutiny, leave them out until the user decides to sync them.
-
-## Private-To-Public Sync Workflow
-
-- Treat the private `Split Rewards` repo as the implementation source and this repo as a sanitized publication mirror.
-- Do not do a blind file-for-file mirror from private to public.
-- Sync newer production-ready app code and tests from private only after a publication sweep.
-- Preserve the public repo's sanitization layer when it already exists.
-
-When updating this public repo from private:
-
-- keep public-facing README, AGENTS, and publication-oriented docs as the base versions
-- update those docs only as needed to reflect new code or changed behavior
-- preserve public-safe placeholders for bundle identifiers, app-group identifiers, keychain access groups, messaging/lightning domains, support/contact examples, development team settings, and related config
-- keep stricter public ignore rules and local-override patterns in place
-- exclude local-only config files, machine-specific Xcode state, signing material, provisioning assets, and internal-only notes
-
-Default review stance during a sync:
-
-- implementation changes should usually come from private
-- sanitization, placeholder config, entitlements strategy, and public positioning should usually stay from public
-- if the private version would reintroduce real identifiers or internal setup, re-apply the public version or adapt the change before publishing
+- This is the main live frontend in production now.
+- It is the first place new development should happen.
+- The user is comfortable working with Swift and Node.js.
 
 ## Current Repo Shape
 
-- `Split Rewards.xcodeproj`: Xcode project
-- `Split Rewards/`: main app sources
-- `Split RewardsTests/`: unit tests
-- `Split RewardsUITests/`: UI tests
-- `Config/`: public-safe backend configuration and local override examples
-- `Split-Rewards-Info.plist`: app Info plist
+- `Split_RewardsApp.swift`: app entry, version gate, root environment objects
+- `MainTemplateView.swift`: top-level tab shell and live messaging sync loop
+- `Utilities/`: app config, auth/session logic, app state, keychain helpers, shared utilities
+- `Wallet SDK Manager /`: wallet lifecycle, auth signing support, payments, contacts, deposits, transaction handling
+- `Message Manager/`: messaging key registration, sync, crypto, storage, push token sync, routing
+- `Functions/`: focused backend calls for rewards, profile, feed, on-ramp, merchant reporting, Breez API key, etc.
+- `Views/`: components, screens, and sheets
+- `Config/`: xcconfig-based environment configuration
 
-Current public snapshot notes:
+## Build And Dependency Notes
 
-- This public repo currently exposes the main app and the test targets.
-- Public-safe placeholder bundle identifiers and shared app-group/keychain identifiers are expected here; production identifiers should not be published.
-- Trust the actual public repo contents when describing what is publicly available.
+- Xcode project: `Split Rewards.xcodeproj`
+- Deployment target is iOS 17.6 in repo docs
+- Swift package dependencies currently include Breez Spark, Bip39, secp256k1, and JWTDecode
+
+## Backend Contract Surface Used Here
+
+Important current calls include:
+
+- version gate: `/rewards-version-check`
+- auth/session: `/auth/nonce`, `/auth/wallet-login`, `/session`
+- Breez bootstrap: `/breez-api-key`
+- profile media: `/Profile_Pic`, `/Upload_Profile_Pic`
+- rewards and on-ramp: `/v1/RewardStats`, `/BuyRamp`, `/reward_onRamp_buy`, `/moonpay/prepare-buy`
+- merchant reporting: `/ReportMerchantPubkey`
+- messaging: `/messaging/v4/*` for identity, lookup, send, inbox, ack, outgoing statuses, device registrations, blocks, and attachments
+
+## Environment Configuration
+
+- Public-safe defaults live in `Config/Debug.xcconfig` and `Config/Release.xcconfig`
+- Local overrides are expected through local xcconfig files
+- `Utilities/AppConfig.swift` constructs the base URL from configured scheme/host values
+
+When working on config-related tasks:
+
+- start in `Config/`
+- then verify how `AppConfig.swift` consumes the values
+- avoid baking environment assumptions directly into feature code
 
 ## Working Rules For Future Changes
 
-- If syncing from `Split Rewards`, do a publication sweep before pushing:
-- remove or avoid private signing material
-- remove internal-only material
-- verify local-only config is not committed
-- verify docs reflect the public snapshot accurately
-- verify the public code is coherent and production-ready
-- preserve the public repo's sanitized README/docs/config/entitlements posture unless the user explicitly wants that changed
-- Keep backend URLs configurable through `Config/` and `Utilities/AppConfig.swift`.
-- Preserve the same backend contract discipline as the private app: public code should reflect stable, production-safe API usage.
-- If a feature is live privately but not intended for public release yet, do not assume it belongs here.
-- If asked to review or update this repo, optimize for public clarity and publication readiness, not internal development speed.
+- Implement new product work here first unless told otherwise.
+- If a feature needs backend changes, coordinate them with `Split` using version-safe API evolution.
+- If a feature affects Android eventually, keep the user-visible behavior and backend contract cleanly portable.
+- If a task touches wallet/auth flows, start with `Wallet SDK Manager /` and `Utilities/AuthManager.swift`.
+- If a task touches messaging, start with `Message Manager/` and `MainTemplateView.swift`.
+- If a task touches navigation or product presentation, inspect `MainTemplateView.swift`, `Views/Screens/`, and `Views/Sheets/`.
 
 ## Testing And Verification
 
-- Never run iOS simulators on this machine.
-- The user tests manually on physical devices.
-- Safe verification includes static review, project inspection, targeted builds, and public-safety sweeps.
+- Do not run an iOS simulator on this machine.
+- The user tests manually on real devices.
+- Safe verification paths include code review, targeted builds, project inspection, and non-simulator checks.
+- Unit/UI test targets exist, but do not use simulator-driven workflows unless the user explicitly changes this rule.
 
 ## Coordination Notes
 
-- Active feature work usually starts in the private `Split Rewards` repo.
-- This repo should be updated when the user decides the public iOS snapshot should move forward.
-- Never treat this repo like a staging branch.
-- If unsure whether something is public-safe, stop and confirm before publishing.
+- This repo leads feature development.
+- `Split Android` is intentionally downstream of iOS right now.
+- Once an iOS feature is production ready, the next step is usually to mirror it into Android with backend compatibility preserved.

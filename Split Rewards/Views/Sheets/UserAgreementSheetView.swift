@@ -167,7 +167,3 @@ struct UserAgreementSheetView: View {
 #Preview {
     UserAgreementSheetView()
 }
-
-
-
-

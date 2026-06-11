@@ -13,8 +13,8 @@ struct KeychainHelper {
     static let walletSeedKey = "split.wallet.seed"
 
     /// A stable service namespace for all Keychain entries from this app.
-    private static let service = AppConfig.keychainService
-    private static let sharedAccessGroup = AppConfig.sharedKeychainAccessGroup
+    private static let service = "com.example.SplitRewards"
+    private static let sharedAccessGroup = "com.example.splitrewards.shared"
 
     static func save(_ value: String, forKey key: String) {
         delete(forKey: key)

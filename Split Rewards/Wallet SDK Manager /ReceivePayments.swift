@@ -54,34 +54,6 @@ extension WalletManager {
         }
     }
 
-    // MARK: - On-chain address
-
-    /// Generate a new on-chain Bitcoin address for receiving funds.
-    ///
-    /// - Returns: A bech32/base58 BTC address string, or `nil` on failure.
-    func generateBitcoinAddress() async -> String? {
-        lastErrorMessage = nil
-
-        guard let sdk else {
-            lastErrorMessage = "Wallet not initialized."
-            return nil
-        }
-
-        do {
-            let response = try await sdk.receivePayment(
-                request: ReceivePaymentRequest(
-                    paymentMethod: .bitcoinAddress(newAddress: true)
-                )
-            )
-
-            let address = response.paymentRequest
-            return address
-        } catch {
-            lastErrorMessage = "Failed to get Bitcoin address: \(error.localizedDescription)"
-            return nil
-        }
-    }
-
     // MARK: - Spark address
 
     /// Generate a Spark address for receiving via the Spark overlay network.

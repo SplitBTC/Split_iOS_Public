@@ -60,7 +60,7 @@ struct Split_RewardsTests {
 
     @Test func messagingV4LightningAddressHashUsesBackendContract() throws {
         let hash = try MessagingPrivacyV4.lightningAddressClientHash(
-            for: " Donate@Example.com "
+            for: " Donate@example.com "
         )
 
         #expect(hash == "5b302903b0b357301b2b5441b794e19bd26a1e6232e12b1b1f5764e9b5ff41ab")
@@ -78,7 +78,7 @@ struct Split_RewardsTests {
         #expect(message == """
         SplitRewards Messaging Identity Authorization
         version=4
-        domain=splitrewards.messaging
+        domain=example.messaging
         hashScheme=split-ln-address-sha256-v1
         walletPubkey=02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         lightningAddressHash=5b302903b0b357301b2b5441b794e19bd26a1e6232e12b1b1f5764e9b5ff41ab

@@ -32,18 +32,8 @@ AppIcon</string>
 	<string>$(BASE_SCHEME)</string>
 	<key>SplitBaseHost</key>
 	<string>$(BASE_HOST)</string>
-	<key>SplitAppGroupIdentifier</key>
-	<string>$(SPLIT_SHARED_APP_GROUP_IDENTIFIER)</string>
-	<key>SplitSharedKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)$(SPLIT_SHARED_KEYCHAIN_GROUP_SUFFIX)</string>
-	<key>SplitKeychainService</key>
-	<string>$(SPLIT_KEYCHAIN_SERVICE)</string>
 	<key>SplitMessagingPushEnvironment</key>
 	<string>$(MESSAGING_PUSH_ENV)</string>
-	<key>SplitMessagingIdentityDomain</key>
-	<string>$(MESSAGING_IDENTITY_DOMAIN)</string>
-	<key>SplitLightningAddressDomain</key>
-	<string>$(LIGHTNING_ADDRESS_DOMAIN)</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

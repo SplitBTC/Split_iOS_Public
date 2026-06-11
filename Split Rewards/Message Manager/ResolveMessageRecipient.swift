@@ -117,6 +117,10 @@ enum ResolveMessageRecipientAPI {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
         struct RequestBody: Encodable {
             let lightningAddressHash: String
             let lightningAddressHashScheme: String

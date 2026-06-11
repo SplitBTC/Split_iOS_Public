@@ -121,6 +121,10 @@ enum SendMessageAPI {
         request.httpShouldHandleCookies = true
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await MessagingAuthenticatedWalletHeader.apply(
+            to: &request,
+            walletManager: walletManager
+        )
         request.httpBody = try JSONEncoder().encode(body)
 
         var (data, response) = try await URLSession.shared.data(for: request)

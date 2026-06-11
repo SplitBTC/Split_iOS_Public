@@ -88,13 +88,6 @@ struct ProfileView: View {
                 destination: AnyView(RewardsInfo())
             ),
             ProfileNavItem(
-                id: "claim-bitcoin",
-                image: "arrow.down.circle.fill",
-                title: "Claim Your Bitcoin",
-                subtitle: "On-chain deposits.",
-                destination: AnyView(BitcoinPending())
-            ),
-            ProfileNavItem(
                 id: "support",
                 image: "questionmark.bubble.fill",
                 title: "Contact / Support",
@@ -318,7 +311,7 @@ struct CreateLightningAddressSheet: View {
 
                                 VStack(alignment: .leading, spacing: 8) {
                                     usernameField
-                                    Text("@\(AppConfig.lightningAddressDomain)")
+                                    Text("@example.com")
                                         .font(.subheadline)
                                         .foregroundColor(.gray.opacity(0.5))
                                 }
@@ -341,7 +334,7 @@ struct CreateLightningAddressSheet: View {
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundColor(.white)
 
-                                Text("\(normalizedUsernamePreview)@\(AppConfig.lightningAddressDomain)")
+                                Text("\(normalizedUsernamePreview)@example.com")
                                     .font(.headline)
                                     .foregroundColor(.white)
                                     .lineLimit(2)
@@ -410,7 +403,7 @@ struct CreateLightningAddressSheet: View {
         HStack(spacing: 8) {
             usernameField
 
-            Text("@\(AppConfig.lightningAddressDomain)")
+            Text("@example.com")
                 .font(.subheadline)
                 .foregroundColor(.gray.opacity(0.5))
                 .lineLimit(1)
